@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Aufgaben</title>
+<style>
+  .board { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; align-items: start; }
+  @media (max-width: 860px) { .board { grid-template-columns: 1fr; } }
+  .col { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; min-height: 300px; }
+  .col.over { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 6%, var(--bg2)); }
+  .col h3 { display:flex; align-items:center; gap: 8px; font-size: 15px; margin: 2px 4px 12px; }
+  .col h3 .n { margin-left: auto; font: 600 12px var(--f-mono); color: var(--mute); }
+  .task { background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--pc, var(--line2)); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; cursor: grab; }
+  .task:hover { border-color: var(--line2); border-left-color: var(--pc); }
+  .task.dragging { opacity: .4; }
+  .task .t { font-weight: 600; font-size: 14px; } .task.done .t { text-decoration: line-through; color: var(--faint); }
+  .task .m { display:flex; gap: 6px; align-items:center; margin-top: 6px; flex-wrap: wrap; font-size: 12px; color: var(--mute); }
+  .task .acts { display:none; gap: 4px; margin-left: auto; } .task:hover .acts { display:flex; }
+  .due.over { color: var(--bad); font-weight: 600; } .due.today { color: var(--warn); font-weight: 600; }
+  .add { display:grid; grid-template-columns: 1fr 150px 130px 130px auto; gap: 8px; }
+  @media (max-width: 860px) { .add { grid-template-columns: 1fr 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Organisation</div><h1>Aufgaben</h1><p>Drei Spalten, ziehen zum Verschieben. Überfällige Aufgaben werden rot, heute fällige gelb. Die Startseite zeigt dir, was heute dran ist.</p></div>
+    <div class="row"><div class="tabs" id="flt"><button class="on" data-f="">Alle</button><button data-f="heute">Heute & überfällig</button><button data-f="woche">Diese Woche</button></div></div>
+  </div>
+  <form class="panel add" id="addF" style="margin-bottom:14px">
+    <input id="aT" placeholder="Neue Aufgabe … (Enter)" required>
+    <input id="aD" type="date" title="Fällig am">
+    <select id="aP"><option value="1">Priorität normal</option><option value="2">Priorität hoch</option><option value="0">Priorität niedrig</option></select>
+    <input id="aTag" placeholder="Tag, z. B. Schule" list="tags">
+    <button class="primary">Hinzufügen</button>
+  </form>
+  <datalist id="tags"></datalist>
+  <div class="board" id="board"></div>
+  <div class="row end" style="margin-top:12px"><button class="sm ghost" id="clean">Erledigte älter als 7 Tage entfernen</button></div>
+</main>
+<script>
+WB.header('aufgaben');
+const { $, $$, esc, uid, today, ymd, parseYmd, fmtDate, daysBetween, Store, toast } = WB;
+let D = { tasks: [] }, flt = '';
+const save = () => Store.set('aufgaben', D);
+const COLS = [['offen', 'Offen', 'var(--mute)'], ['arbeit', 'In Arbeit', 'var(--acc)'], ['fertig', 'Erledigt', 'var(--good)']];
+const PRIO = { 0: ['niedrig', 'var(--line2)'], 1: ['normal', 'var(--acc)'], 2: ['hoch', 'var(--bad)'] };
+function visible(t) {
+  if (!flt) return true; if (!t.due || t.col === 'fertig') return false;
+  if (flt === 'heute') return t.due <= today();
+  const end = new Date(); end.setDate(end.getDate() + (7 - ((end.getDay() + 6) % 7)) - 1); return t.due <= ymd(end);
+}
+function render() {
+  $('#tags').innerHTML = [...new Set(D.tasks.map(t => t.tag).filter(Boolean))].map(t => `<option value="${esc(t)}">`).join('');
+  $('#board').innerHTML = COLS.map(([id, name, c]) => { const l = D.tasks.filter(t => t.col === id && visible(t)).sort((a, b) => (b.prio - a.prio) || (a.due || '9').localeCompare(b.due || '9'));
+    return `<div class="col" data-col="${id}"><h3><span class="dot" style="background:${c}"></span>${name}<span class="n">${l.length}</span></h3>
+      ${l.map(t => { const d = t.due ? daysBetween(today(), t.due) : null;
+        return `<div class="task ${id === 'fertig' ? 'done' : ''}" draggable="true" data-id="${t.id}" style="--pc:${PRIO[t.prio][1]}"><div class="t">${esc(t.t)}</div>
+        <div class="m">${t.due ? `<span class="due ${id !== 'fertig' && d < 0 ? 'over' : id !== 'fertig' && d === 0 ? 'today' : ''}">${d === 0 ? 'heute' : d === 1 ? 'morgen' : d < 0 ? Math.abs(d) + ' T überfällig' : fmtDate(t.due, { day: '2-digit', month: 'short' })}</span>` : ''}
+        ${t.tag ? `<span class="chip">${esc(t.tag)}</span>` : ''}${t.note ? '<span title="' + esc(t.note) + '">📝</span>' : ''}${t.prio === 2 ? '<span class="bad">● hoch</span>' : ''}
+        <span class="acts">${id !== 'fertig' ? `<button class="sm" data-done="${t.id}" title="Erledigt">✓</button>` : ''}<button class="sm ghost" data-ed="${t.id}" title="Bearbeiten">✎</button><button class="sm ghost danger" data-del="${t.id}">✕</button></span></div></div>`; }).join('') || '<div class="faint" style="font-size:13px;padding:10px 4px">leer</div>'}</div>`; }).join('');
+  $$('.task').forEach(el => { el.ondragstart = e => { e.dataTransfer.setData('text/plain', el.dataset.id); el.classList.add('dragging'); }; el.ondragend = () => el.classList.remove('dragging'); });
+  $$('.col').forEach(c => { c.ondragover = e => { e.preventDefault(); c.classList.add('over'); }; c.ondragleave = () => c.classList.remove('over');
+    c.ondrop = e => { e.preventDefault(); c.classList.remove('over'); const t = D.tasks.find(x => x.id === e.dataTransfer.getData('text/plain')); if (t) { t.col = c.dataset.col; if (t.col === 'fertig') t.doneAt = today(); save(); render(); } }; });
+}
+$('#addF').onsubmit = e => { e.preventDefault(); D.tasks.push({ id: uid(), t: $('#aT').value.trim(), due: $('#aD').value || null, prio: +$('#aP').value, tag: $('#aTag').value.trim(), col: 'offen', created: today() });
+  $('#aT').value = ''; save(); render(); $('#aT').focus(); };
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.done) { const t = D.tasks.find(x => x.id === b.dataset.done); t.col = 'fertig'; t.doneAt = today(); save(); render(); toast('Erledigt ✓'); }
+  if (b.dataset.ed) { const t = D.tasks.find(x => x.id === b.dataset.ed);
+    WB.editForm('Aufgabe bearbeiten', [{ k: 't', l: 'Aufgabe', v: t.t, req: true }, { k: 'due', l: 'Fällig am', type: 'date', v: t.due || '' }, { k: 'prio', l: 'Priorität', type: 'select', v: t.prio, opts: [[0, 'niedrig'], [1, 'normal'], [2, 'hoch']] },
+      { k: 'tag', l: 'Tag', v: t.tag || '' }, { k: 'col', l: 'Spalte', type: 'select', v: t.col, opts: [['offen', 'Offen'], ['arbeit', 'In Arbeit'], ['fertig', 'Erledigt']] }, { k: 'note', l: 'Notiz', type: 'textarea', v: t.note || '' }], { danger: 'Löschen' })
+      .then(v => { if (v === 'delete') D.tasks = D.tasks.filter(x => x !== t); else if (v) Object.assign(t, v, { prio: +v.prio, due: v.due || null, doneAt: v.col === 'fertig' ? (t.doneAt || today()) : null }); if (v) { save(); render(); } }); }
+  if (b.dataset.del) { D.tasks = D.tasks.filter(x => x.id !== b.dataset.del); save(); render(); } });
+$('#flt').onclick = e => { const b = e.target.closest('button'); if (!b) return; flt = b.dataset.f; $$('#flt button').forEach(x => x.classList.toggle('on', x === b)); render(); };
+$('#clean').onclick = () => { const lim = ymd(new Date(Date.now() - 7 * 864e5)); const n = D.tasks.length; D.tasks = D.tasks.filter(t => !(t.col === 'fertig' && (t.doneAt || '') < lim)); save(); render(); toast((n - D.tasks.length) + ' entfernt'); };
+(async () => { D = Object.assign(D, await Store.get('aufgaben', D)); render(); })();
+</script>
+</body></html>

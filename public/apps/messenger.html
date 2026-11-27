@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Messenger</title>
+<style>
+  .chat { display:grid; grid-template-columns: 300px minmax(0,1fr); height: calc(100vh - 290px); min-height: 500px; border:1px solid var(--line); border-radius: var(--r); overflow:hidden; background: var(--bg2); }
+  .contacts { border-right:1px solid var(--line); display:flex; flex-direction:column; min-height: 0; }
+  .contacts .find { padding: 10px; border-bottom: 1px solid var(--line); } #cts { overflow:auto; flex: 1; }
+  .ct { display:flex; gap: 12px; align-items:center; padding: 12px 14px; cursor:pointer; border:0; border-bottom: 1px solid var(--line); width: 100%; background: transparent; border-radius: 0; text-align: left; justify-content: flex-start; font-weight: 400; }
+  .ct:hover { background: var(--bg3); } .ct.on { background: var(--bg3); box-shadow: inset 3px 0 0 var(--acc); }
+  .ct .grow { white-space: nowrap; overflow:hidden; } .ct .grow > div { overflow:hidden; text-overflow: ellipsis; }
+  .av { position: relative; width: 40px; height: 40px; border-radius: 12px; display:grid; place-items:center; font: 700 15px var(--f-display); background: var(--bg); border: 1px solid var(--line2); flex:none; }
+  .av.on::after { content: ''; position:absolute; right: -3px; bottom: -3px; width: 11px; height: 11px; border-radius: 50%; background: var(--good); border: 2px solid var(--bg2); }
+  .badge { background: var(--acc); color: var(--acc-ink); font: 700 11px var(--f-mono); border-radius: 99px; padding: 2px 7px; }
+  .pane { display:flex; flex-direction:column; min-width: 0; min-height: 0; position: relative; }
+  .pane.drop::after { content: 'Datei hier ablegen'; position:absolute; inset: 10px; border: 2px dashed var(--acc); border-radius: 12px; background: color-mix(in srgb, var(--bg) 85%, transparent); display:grid; place-items:center; font: 600 18px var(--f-display); z-index: 5; pointer-events:none; }
+  .pane-h { padding: 10px 14px; border-bottom: 1px solid var(--line); display:flex; gap: 10px; align-items:center; flex-wrap: wrap; }
+  .back { display:none; }
+  .mi { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: -4px; flex: none; }
+  .meta .mi { width: 11px; height: 11px; stroke-width: 2.2; vertical-align: -1px; } .pane-h .mi { width: 15px; height: 15px; vertical-align: -3px; } .pane-h .long { margin-left: 6px; } .file .mi { width: 16px; height: 16px; }
+  .pane-h .grow { min-width: 0; } .pane-h .grow > * { display:block; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+  .findbar { padding: 8px 14px; border-bottom: 1px solid var(--line); display:flex; gap: 8px; align-items:center; }
+  .msgs { flex:1; overflow:auto; padding: 18px; display:flex; flex-direction:column; gap: 6px; }
+  .mw { display:flex; flex-direction:column; align-items:flex-start; max-width: 78%; position: relative; } .mw.me { align-self:flex-end; align-items:flex-end; }
+  .mw.hit .m { outline: 2px solid var(--warn); }
+  .m { padding: 9px 13px; border-radius: 14px; border-bottom-left-radius: 4px; background: var(--bg3); border: 1px solid var(--line); white-space: pre-wrap; overflow-wrap: anywhere; min-width: 90px; }
+  .me .m { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); border-bottom-left-radius: 14px; border-bottom-right-radius: 4px; }
+  .m a { color: inherit; text-decoration: underline; }
+  .m .meta { font: 10px var(--f-mono); opacity: .7; margin-top: 3px; display:flex; gap: 8px; justify-content: flex-end; align-items:center; white-space: nowrap; }
+  .ticks.read { opacity: 1; font-weight: 700; }
+  .m.bad { border-color: var(--bad); color: var(--bad); background: transparent; }
+  .quote { display:block; width: 100%; text-align:left; border:0; border-left: 3px solid currentColor; background: color-mix(in srgb, currentColor 10%, transparent); color: inherit; border-radius: 6px; padding: 5px 9px; margin-bottom: 6px; font-weight: 400; font-size: 12.5px; white-space: nowrap; overflow:hidden; text-overflow: ellipsis; max-width: 320px; }
+  .quote b { display:block; font-size: 11px; }
+  .att img { display:block; max-width: min(320px, 100%); max-height: 280px; border-radius: 8px; cursor: zoom-in; margin-bottom: 4px; }
+  .att audio { display:block; width: 260px; max-width: 100%; margin-bottom: 4px; }
+  .att .file { display:inline-flex; gap: 8px; align-items:center; border: 1px solid currentColor; background: transparent; color: inherit; margin-bottom: 4px; max-width: 100%; } .att .file span { overflow:hidden; text-overflow: ellipsis; }
+  .reacts { display:flex; gap: 4px; margin-top: -4px; padding: 0 6px; flex-wrap: wrap; position: relative; } .reacts button { padding: 1px 7px; border-radius: 99px; font-size: 13px; background: var(--bg2); } .reacts button.mine { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 18%, var(--bg2)); }
+  .tools { position:absolute; top: -16px; right: 4px; display:none; gap: 2px; padding: 3px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 10px; z-index: 3; box-shadow: 0 8px 20px -10px rgba(0,0,0,.6); white-space: nowrap; }
+  .mw.me .tools { right: auto; left: -4px; transform: translateX(-30%); }
+  .tools button { padding: 3px 7px; font-size: 13px; border: 0; background: transparent; }
+  .mw:hover .tools, .mw.act .tools, .mw:focus-within .tools { display:flex; }
+  .day { align-self:center; font: 11px var(--f-mono); color: var(--faint); margin: 10px 0 4px; }
+  .banner { display:flex; gap: 10px; align-items:center; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 13px; } .banner span.grow { white-space: nowrap; overflow:hidden; text-overflow: ellipsis; }
+  .composer { display:flex; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--line); align-items:end; position: relative; }
+  .composer textarea { min-height: 42px; height: 42px; max-height: 160px; resize: none; }
+  .composer > button { height: 42px; flex: none; } .composer .icon { width: 42px; height: 42px; font-size: 17px; }
+  .emoji { position:absolute; bottom: 62px; left: 12px; width: min(330px, calc(100% - 24px)); max-height: 220px; overflow:auto; display:grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; padding: 8px; background: var(--bg2); border: 1px solid var(--line2); border-radius: 12px; z-index: 6; box-shadow: 0 14px 30px -14px rgba(0,0,0,.7); }
+  .emoji button { border:0; background: transparent; font-size: 20px; padding: 4px; }
+  .rec { color: var(--bad); font: 600 14px var(--f-mono); }
+  .lock { max-width: 460px; margin: 40px auto; text-align:center; }
+  .lock .ico { width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 18px; display:grid; place-items:center; border: 1px solid var(--acc); color: var(--acc); }
+  .fp { font: 13px/1.8 var(--f-mono); letter-spacing: .06em; word-spacing: .4em; }
+  #zoomDlg { width: auto; max-width: 96vw; padding: 10px; } #zoomDlg img { display:block; max-width: calc(96vw - 24px); max-height: 82vh; }
+  @media (max-width: 760px) { .chat { grid-template-columns: minmax(0,1fr); height: calc(100dvh - 110px); } .chat .pane { display:none; } .chat.open .pane { display:flex; } .chat.open .contacts { display:none; } .contacts { border-right: 0; } .back { display:inline-flex; }
+    .chat.open { position: fixed; inset: 0; height: auto; z-index: 40; border: 0; border-radius: 0; } .pane-h { gap: 6px; padding: 8px; flex-wrap: nowrap; } .pane-h .av { display:none; } .pane-h .long { display:none; } .pane-h select { max-width: 104px; }
+    .mw { max-width: 90%; } .page-head p { display:none; } .composer { gap: 2px; padding: 8px 6px; } .composer .icon { width: 36px; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">19 · Kommunikation</div><h1>Messenger</h1><p>Ende-zu-Ende-verschlüsselt: Nachrichten und Dateien werden in deinem Browser verschlüsselt und signiert. Der Server sieht und speichert nur Geheimtext.</p></div>
+    <div class="row"><span class="chip" id="state">gesperrt</span><button class="sm" id="setBtn" hidden>Einstellungen</button><button class="sm" id="lockBtn" hidden>Sperren</button></div>
+  </div>
+  <div id="app"></div>
+</main>
+<dialog id="fpDlg"><div class="stack"><h3>Sicherheitsnummer prüfen</h3><p class="mute" style="font-size:14px">Vergleich diese Nummer mit der Person, z. B. persönlich oder am Telefon. Stimmt sie überein, liest niemand mit, auch nicht der Server.</p>
+  <div class="sunk"><div class="label" style="margin-bottom:6px" id="fpName"></div><div class="fp" id="fpThem"></div></div><div class="sunk"><div class="label" style="margin-bottom:6px">Deine Nummer</div><div class="fp" id="fpMe"></div></div>
+  <div class="row end"><button onclick="this.closest('dialog').close()">Schließen</button><button class="primary" id="fpOk">Als geprüft markieren</button></div></div></dialog>
+<dialog id="setDlg"><form method="dialog" class="stack"><h3>Messenger-Einstellungen</h3>
+  <label class="row" style="gap:10px"><input type="checkbox" data-pref="receipts"> Lesebestätigungen senden</label>
+  <label class="row" style="gap:10px"><input type="checkbox" data-pref="typing"> Zeigen, wenn ich tippe</label>
+  <label class="row" style="gap:10px"><input type="checkbox" data-pref="showOnline"> Zeigen, wenn ich online bin</label>
+  <label class="field"><span>Tresor automatisch sperren, wenn ich nichts tue</span><select id="autoLock"><option value="0">Nie</option><option value="5">nach 5 Minuten</option><option value="15">nach 15 Minuten</option><option value="60">nach 1 Stunde</option></select></label>
+  <div class="row"><button type="button" id="notify">Benachrichtigungen erlauben</button><span class="mute" style="font-size:12px" id="notifyState"></span></div>
+  <div class="row end"><button class="primary">Fertig</button></div></form></dialog>
+<dialog id="zoomDlg"><img id="zoomImg" alt="Anhang"><div class="row end" style="margin-top:8px"><button onclick="this.closest('dialog').close()">Schließen</button></div></dialog>
+<input type="file" id="fileIn" hidden>
+<script>
+WB.header('messenger');
+const { $, $$, esc, api, Store, toast } = WB;
+const S = crypto.subtle, te = new TextEncoder(), td = new TextDecoder();
+const b64 = buf => { const a = new Uint8Array(buf); let s = ''; for (let i = 0; i < a.length; i += 32768) s += String.fromCharCode(...a.subarray(i, i + 32768)); return btoa(s); };
+const ub64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const rand = n => crypto.getRandomValues(new Uint8Array(n));
+const ITER = 600000, INFO = te.encode('werkbank-msg-v1'), FILE_MAX = 8 * 1024 * 1024;
+const QUICK = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const EMOJI = '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 😉 😊 😍 🥰 😘 😎 🤓 🤔 🤨 😐 🙄 😏 😬 😴 🥱 😋 😛 😜 🤪 🤯 🥳 😢 😭 😤 😠 😡 🤬 😱 😳 🥺 😇 🤗 🤫 🫡 💀 👀 👍 👎 👌 ✌️ 🤞 👊 👏 🙌 🙏 💪 🫶 ❤️ 🧡 💛 💚 💙 💜 🖤 💔 🔥 ✨ ⭐ 🎉 🎂 🎁 ✅ ❌ ❓ ❗ 💯 ⚡ ☕ 🍕 🍔 🍻 ⚽ 🎮 💻 📱 🚗 🏠 📅 ⏰'.split(' ');
+let me = null, keys = null, contacts = [], sel = null, conv = [], prefs = { lastRead: {}, verified: {} }, es = null, myFp = '';
+let peerRead = 0, reply = null, editing = null, pending = null, drafts = {}, typingFrom = {}, convSeq = 0, view = new Map(), findTerm = '';
+const blobs = new Map(); // Anhang-ID -> Promise der lokalen Adresse (entschlüsselt, nur in diesem Tab)
+const svg = d => `<svg class="mi" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`; // eigene Symbole, unabhängig von Emoji-Schriften
+const IC = {
+  find: svg('<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'), clip: svg('<path d="M20 11l-8.5 8.5a5 5 0 0 1-7-7L13 4a3.5 3.5 0 0 1 5 5l-8.500 8.500a2 2 0 0 1-3-3L14 7"/>'),
+  smile: svg('<circle cx="12" cy="12" r="9"/><path d="M8 14s1.500 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>'), mic: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>'),
+  file: svg('<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>'), lock: svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>'),
+  shield: svg('<path d="M12 3l8 3v6c0 5-3.500 8-8 9-4.500-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>'), clock: svg('<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.500 2M9 2h6"/>')
+};
+const ref = m => m.sig.slice(0, 32); // vom Absender signiert, der Server kann Bezüge nicht umbiegen
+
+// ---------- Krypto ----------
+async function kek(pass, salt, iter) { const base = await S.importKey('raw', te.encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return S.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: iter }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }
+async function fingerprint(pub) { const h = await S.digest('SHA-256', te.encode(pub.ecdh + '|' + pub.ecdsa)); return [...new Uint8Array(h)].slice(0, 15).map(b => String(b % 100).padStart(2, '0')).join('').match(/.{5}/g).join(' '); }
+async function createVault(pass) {
+  const dh = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const sg = await S.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const pub = { ecdh: b64(await S.exportKey('spki', dh.publicKey)), ecdsa: b64(await S.exportKey('spki', sg.publicKey)) };
+  const priv = JSON.stringify({ ecdh: b64(await S.exportKey('pkcs8', dh.privateKey)), ecdsa: b64(await S.exportKey('pkcs8', sg.privateKey)) });
+  const salt = rand(16), iv = rand(12), k = await kek(pass, salt, ITER);
+  const ct = await S.encrypt({ name: 'AES-GCM', iv }, k, te.encode(priv));
+  await api('/api/msg/keys', { method: 'PUT', body: { pub, blob: { salt: b64(salt), iv: b64(iv), ct: b64(ct), iter: ITER } } });
+}
+async function openVault(rec, pass) {
+  const k = await kek(pass, ub64(rec.blob.salt), rec.blob.iter);
+  const priv = JSON.parse(td.decode(await S.decrypt({ name: 'AES-GCM', iv: ub64(rec.blob.iv) }, k, ub64(rec.blob.ct))));
+  return { pub: rec.pub,
+    dh: await S.importKey('pkcs8', ub64(priv.ecdh), { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']),
+    sg: await S.importKey('pkcs8', ub64(priv.ecdsa), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']) };
+}
+const impDH = s => S.importKey('spki', ub64(s), { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+const impSG = s => S.importKey('spki', ub64(s), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+async function hkdf(bits, salt) { const h = await S.importKey('raw', bits, 'HKDF', false, ['deriveKey']); return S.deriveKey({ name: 'HKDF', hash: 'SHA-256', salt, info: INFO }, h, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']); }
+const sigStr = m => [m.from, m.to, m.ts, m.ttl, m.iv, m.ct, JSON.stringify(m.keys)].join('|');
+async function encryptMsg(payload, to, ttl) {
+  const body = te.encode(JSON.stringify(payload)); const padded = new Uint8Array(Math.ceil((body.length + 1) / 128) * 128); padded.set(body); // Länge verschleiern
+  const ck = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']); const raw = await S.exportKey('raw', ck);
+  const iv = rand(12), aad = te.encode(me.id + '>' + to.id);
+  const ct = await S.encrypt({ name: 'AES-GCM', iv, additionalData: aad }, ck, padded);
+  const out = {}; // Inhaltsschlüssel für jeden Empfänger einzeln verpacken (frisches Ephemeral-Schlüsselpaar pro Empfänger)
+  for (const r of [to, { id: me.id, pub: keys.pub }]) {
+    const eph = await S.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+    const bits = await S.deriveBits({ name: 'ECDH', public: await impDH(r.pub.ecdh) }, eph.privateKey, 256);
+    const salt = rand(16), wiv = rand(12), wk = await hkdf(bits, salt);
+    out[r.id] = { epk: b64(await S.exportKey('spki', eph.publicKey)), salt: b64(salt), iv: b64(wiv), wk: b64(await S.encrypt({ name: 'AES-GCM', iv: wiv }, wk, raw)) };
+  }
+  const m = { from: me.id, to: to.id, ts: Date.now(), ttl, iv: b64(iv), ct: b64(ct), keys: out };
+  m.sig = b64(await S.sign({ name: 'ECDSA', hash: 'SHA-256' }, keys.sg, te.encode(sigStr(m))));
+  return m;
+}
+async function decryptMsg(m, partner) {
+  try {
+    if (!((m.from === me.id && m.to === partner.id) || (m.from === partner.id && m.to === me.id))) throw new Error('gehört nicht in diesen Chat');
+    const sender = m.from === me.id ? { pub: keys.pub } : partner;
+    if (!sender.pub) throw new Error('Absenderschlüssel fehlt');
+    const ok = await S.verify({ name: 'ECDSA', hash: 'SHA-256' }, await impSG(sender.pub.ecdsa), ub64(m.sig), te.encode(sigStr(m)));
+    if (!ok) throw new Error('Signatur ungültig');
+    const k = m.keys[me.id]; const bits = await S.deriveBits({ name: 'ECDH', public: await impDH(k.epk) }, keys.dh, 256);
+    const wk = await hkdf(bits, ub64(k.salt)); const raw = await S.decrypt({ name: 'AES-GCM', iv: ub64(k.iv) }, wk, ub64(k.wk));
+    const ck = await S.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+    const pt = new Uint8Array(await S.decrypt({ name: 'AES-GCM', iv: ub64(m.iv), additionalData: te.encode(m.from + '>' + m.to) }, ck, ub64(m.ct)));
+    let end = pt.indexOf(0); if (end < 0) end = pt.length;
+    const p = JSON.parse(td.decode(pt.slice(0, end))); if (!p || typeof p !== 'object') throw new Error('unlesbar');
+    return { p, ok: true };
+  } catch (e) { return { p: { t: 'Nicht entschlüsselbar: ' + (e.message || 'Schlüssel passt nicht (Tresor wurde neu eingerichtet?)') }, ok: false }; }
+}
+
+// ---------- Anhänge ----------
+// Nur diese Typen werden direkt angezeigt. Alles andere gibt es ausschließlich als Download (nie als Seite öffnen).
+const IMG = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'], AUD = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav', 'audio/x-m4a', 'audio/aac'];
+const safeName = n => String(n || 'datei').replace(/[\x00-\x1f\x7f\/\\:*?"<>|‪-‮⁦-⁩]/g, '_').replace(/^\.+/, '_').slice(-120) || 'datei';
+const sizeText = n => n >= 1048576 ? (n / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' kB';
+const mimeOf = f => String(f.mime || '').split(';')[0].toLowerCase();
+async function upload(file, to) {
+  const bytes = await file.blob.arrayBuffer(), key = await S.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']), iv = rand(12);
+  const ct = await S.encrypt({ name: 'AES-GCM', iv }, key, bytes);
+  const r = await fetch('/api/msg/file/' + to.id, { method: 'POST', headers: { 'X-WB': '1', 'Content-Type': 'application/octet-stream' }, body: ct });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.error || 'Upload fehlgeschlagen');
+  return { id: j.id, k: b64(await S.exportKey('raw', key)), iv: b64(iv), name: file.name, mime: file.blob.type, size: file.blob.size, ...(file.voice ? { voice: file.voice } : {}) };
+}
+function fileUrl(f) {
+  if (!blobs.has(f.id)) blobs.set(f.id, (async () => {
+    if (!/^[a-f0-9]{32}$/.test(f.id)) throw new Error('ungültig');
+    const r = await fetch('/api/msg/file/' + f.id, { headers: { 'X-WB': '1' } }); if (!r.ok) throw new Error('Datei nicht mehr vorhanden');
+    const key = await S.importKey('raw', ub64(f.k), 'AES-GCM', false, ['decrypt']);
+    const pt = await S.decrypt({ name: 'AES-GCM', iv: ub64(f.iv) }, key, await r.arrayBuffer()), mime = mimeOf(f);
+    return URL.createObjectURL(new Blob([pt], { type: IMG.includes(mime) || AUD.includes(mime) ? mime : 'application/octet-stream' }));
+  })().catch(e => { blobs.delete(f.id); throw e; }));
+  return blobs.get(f.id);
+}
+function setPending(blob, name, extra = {}) {
+  if (!sel?.pub) return;
+  if (!blob.size) return toast('Die Datei ist leer'); if (blob.size > FILE_MAX) return toast('Zu groß: höchstens 8 MB pro Datei');
+  pending = { blob, name: safeName(name), ...extra }; editing = null; banners(); $('#txt')?.focus();
+}
+
+// ---------- Oberfläche ----------
+function lockView(rec) {
+  $('#state').textContent = 'gesperrt'; $('#state').classList.remove('on'); $('#lockBtn').hidden = $('#setBtn').hidden = true;
+  if (!window.isSecureContext || !crypto.subtle) { $('#app').innerHTML = `<div class="panel lock"><h2>Nur über HTTPS</h2><p class="mute" style="margin-top:10px">Browser erlauben Verschlüsselung nur in einer sicheren Verbindung. Öffne die Werkbank über <b>https://…:8443</b> oder direkt auf dem Server über <b>http://localhost:8081</b>.</p></div>`; return; }
+  $('#app').innerHTML = `<form class="panel lock stack" id="lf"><div class="ico">${WB.icon('passwort', 28)}</div>
+    <h2>${rec ? 'Tresor entsperren' : 'Tresor einrichten'}</h2>
+    <p class="mute" style="font-size:14px">${rec ? 'Gib dein Login-Passwort ein. Damit wird dein privater Schlüssel nur in diesem Browser-Tab entschlüsselt.' : 'Einmalig: Dein Browser erzeugt dein Schlüsselpaar. Der private Teil wird mit deinem Login-Passwort verschlüsselt (PBKDF2, 600.000 Runden) und gespeichert.'}</p>
+    <input type="password" id="pw" placeholder="Login-Passwort" autocomplete="current-password" required>
+    <button class="primary" id="lb">${rec ? 'Entsperren' : 'Schlüssel erzeugen'}</button>
+    <p class="faint" style="font-size:12px">Setzt ein Admin dein Passwort zurück, wird der Tresor neu erzeugt. Alte Nachrichten sind dann nicht mehr lesbar. So soll es sein.</p></form>`;
+  $('#pw').focus();
+  $('#lf').onsubmit = async e => { e.preventDefault(); const p = $('#pw').value; $('#lb').disabled = true; $('#lb').textContent = 'Rechne …';
+    try { if (!rec) { await api('/api/auth/verify', { method: 'POST', body: { pass: p } }); await createVault(p); rec = await api('/api/msg/keys'); }
+      keys = await openVault(rec, p); myFp = await fingerprint(keys.pub); start(); }
+    catch (err) { toast(err.message && err.message !== 'OperationError' && !/decrypt/i.test(err.message) ? err.message : 'Passwort falsch'); $('#lb').disabled = false; $('#lb').textContent = rec ? 'Entsperren' : 'Schlüssel erzeugen'; } };
+}
+async function start() {
+  $('#state').textContent = 'entsperrt · E2E'; $('#state').classList.add('on'); $('#lockBtn').hidden = $('#setBtn').hidden = false;
+  $('#app').innerHTML = `<div class="chat" id="chat"><div class="contacts"><div class="find"><input id="cq" type="search" placeholder="Person suchen" autocomplete="off"></div><div id="cts"></div></div><div class="pane" id="pane"><div class="empty" style="margin:auto;border:0">Wähl links eine Person.</div></div></div>`;
+  $('#cq').oninput = drawContacts; idle(); await loadContacts(); connect();
+}
+let loading = null;
+async function loadContacts() {
+  const list = await api('/api/msg/users'); if (!keys) return;
+  for (const c of list) if (c.pub) { c.fp = await fingerprint(c.pub); if (prefs.verified[c.id] && prefs.verified[c.id] !== c.fp) c.changed = true; }
+  contacts = list; if (sel) { const now = contacts.find(c => c.id === sel.id); if (now) sel = now; }
+  drawContacts(); headline();
+}
+function drawContacts() {
+  if (!$('#cts')) return; const q = $('#cq').value.trim().toLowerCase();
+  const list = contacts.filter(c => !q || c.name.toLowerCase().includes(q)).sort((a, b) => b.last - a.last || a.name.localeCompare(b.name, 'de'));
+  const when = t => { const d = new Date(t); return d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }); };
+  $('#cts').innerHTML = list.length ? list.map(c => { const typing = typingFrom[c.id] > Date.now();
+    return `<button class="ct ${c.id === sel?.id ? 'on' : ''}" data-ct="${c.id}"><span class="av ${c.online ? 'on' : ''}">${esc(c.name[0].toUpperCase())}</span><div class="grow"><b>${esc(c.name)}</b>
+      <div style="font-size:12px" class="${c.changed ? 'bad' : typing ? 'acc' : 'mute'}">${typing ? 'tippt …' : !c.pub ? 'noch nicht eingerichtet' : c.changed ? '⚠ Schlüssel geändert' : (prefs.verified[c.id] ? '✓ geprüft' : 'nicht geprüft') + (c.last ? ' · ' + when(c.last) : '')}</div></div>${c.unread ? `<span class="badge">${c.unread > 99 ? '99+' : c.unread}</span>` : ''}</button>`; }).join('')
+    : `<div class="faint" style="padding:16px;font-size:13px">${q ? 'Niemand gefunden.' : 'Noch niemand sonst hat Zugriff auf den Messenger. Benutzer legst du in der Verwaltung an.'}</div>`;
+  const n = contacts.reduce((s, c) => s + c.unread, 0); document.title = (n ? `(${n}) ` : '') + 'Messenger · Werkbank';
+}
+function headline() {
+  const el = $('#sub'); if (!el || !sel) return; const typing = typingFrom[sel.id] > Date.now();
+  el.textContent = typing ? 'tippt …' : !sel.pub ? 'kann noch keine Nachrichten empfangen' : sel.online ? 'online' : 'Ende-zu-Ende-verschlüsselt'; el.className = typing || sel.online ? 'acc' : 'mute';
+  $('#pane .pane-h .av')?.classList.toggle('on', !!sel.online);
+}
+async function openConv(id) {
+  if (sel && $('#txt') && !editing) drafts[sel.id] = $('#txt').value; // Entwürfe bleiben nur im Arbeitsspeicher
+  stopRec(false); sel = contacts.find(c => c.id === id); if (!sel) return; const my = ++convSeq;
+  reply = editing = pending = null; findTerm = ''; conv = []; peerRead = 0; $('#chat').classList.add('open'); drawContacts();
+  const dis = sel.pub ? '' : 'disabled';
+  $('#pane').innerHTML = `<div class="pane-h"><button class="ghost icon back" data-act="back" aria-label="Zurück">←</button><span class="av">${esc(sel.name[0].toUpperCase())}</span><div class="grow"><b>${esc(sel.name)}</b><div id="sub" class="mute" style="font-size:12px"></div></div>
+    <button class="sm ghost" data-act="find" title="Im Chat suchen" aria-label="Im Chat suchen">${IC.find}</button>${sel.pub ? `<button class="sm ${sel.changed ? 'danger' : ''}" id="fp" title="Sicherheitsnummer prüfen">${IC.shield}<span class="${sel.changed ? '' : 'long'}">${sel.changed ? '⚠ Schlüssel prüfen' : 'Sicherheitsnummer'}</span></button>` : ''}
+    <select id="ttl" class="sm" style="width:auto" title="Selbstzerstörung"><option value="0">∞ bleibt</option><option value="3600000">1 Stunde</option><option value="86400000">24 Stunden</option><option value="604800000">7 Tage</option></select></div>
+    <div class="findbar hide" id="findbar"><input id="findIn" type="search" placeholder="In diesem Chat suchen"><span class="faint mono" style="font-size:12px;white-space:nowrap" id="findN"></span></div>
+    <div class="msgs" id="msgs"><div class="faint" style="margin:auto">Entschlüssle …</div></div><div id="banners"></div>
+    <form class="composer" id="cf"><div class="emoji hide" id="emoji">${EMOJI.map(e => `<button type="button" data-emo="${e}">${e}</button>`).join('')}</div>
+      <button type="button" class="ghost icon" data-act="attach" title="Datei oder Bild anhängen" aria-label="Anhängen" ${dis}>${IC.clip}</button><button type="button" class="ghost icon" data-act="emoji" title="Emoji" aria-label="Emoji" ${dis}>${IC.smile}</button>
+      <textarea id="txt" rows="1" placeholder="${sel.pub ? 'Nachricht …' : 'Noch nicht möglich'}" ${dis} maxlength="8000"></textarea>
+      <button type="button" class="ghost icon" data-act="mic" title="Sprachnachricht aufnehmen" aria-label="Sprachnachricht" ${dis}>${IC.mic}</button><button class="primary" ${dis}>Senden</button></form>`;
+  headline();
+  $('#ttl').value = prefs.ttl?.[id] || '0'; $('#ttl').onchange = e => { prefs.ttl = { ...(prefs.ttl || {}), [id]: e.target.value }; Store.set('messenger', prefs); };
+  if ($('#fp')) $('#fp').onclick = showFp;
+  $('#txt').value = drafts[id] || ''; grow();
+  $('#txt').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); $('#cf').requestSubmit(); } if (e.key === 'Escape' && (reply || editing || pending)) { e.stopPropagation(); cancelBanner(); } };
+  $('#txt').oninput = () => { grow(); sendTyping(); };
+  $('#cf').onsubmit = submit;
+  $('#findIn').oninput = e => { findTerm = e.target.value.trim().toLowerCase(); drawMsgs(false); };
+  const partner = sel, [list, read] = await Promise.all([api('/api/msg/conv/' + id), api('/api/msg/read/' + id).catch(() => ({ ts: 0 }))]);
+  const done = []; for (const m of list) done.push({ ...m, dec: await decryptMsg(m, partner) });
+  if (my !== convSeq || !keys) return; // inzwischen wurde ein anderer Chat geöffnet
+  const have = new Set(done.map(m => m.id)); conv = done.concat(conv.filter(m => !have.has(m.id))); peerRead = Math.max(peerRead, read.ts);
+  drawMsgs(); markRead(); if (matchMedia('(min-width: 761px)').matches) $('#txt').focus();
+}
+function grow() { const t = $('#txt'); if (!t) return; t.style.height = '42px'; t.style.height = Math.min(160, t.scrollHeight + 2) + 'px'; }
+
+// Aus allen Nachrichten die sichtbare Ansicht bauen: Bearbeitungen und Reaktionen gehören zu ihrer Zielnachricht
+function build() {
+  const now = Date.now(), alive = conv.filter(m => !m.ttl || m.ts + m.ttl > now).sort((a, b) => a.ts - b.ts), map = new Map();
+  for (const m of alive) { const p = m.dec.p; if (m.dec.ok && (p.edit || p.react)) continue; map.set(ref(m), { m, p, text: String(p.t || ''), edited: false, reacts: new Map() }); }
+  for (const m of alive) { const p = m.dec.p; if (!m.dec.ok) continue;
+    if (p.edit) { const t = map.get(String(p.edit)); if (t && t.m.from === m.from && t.m.dec.ok) { t.text = String(p.t || ''); t.edited = true; } } // nur der Absender selbst darf ändern
+    else if (p.react) { const t = map.get(String(p.react)); if (!t) continue; const e = String(p.e || '').slice(0, 8); if (e) t.reacts.set(m.from, e); else t.reacts.delete(m.from); } }
+  return map;
+}
+const linkify = text => text.split(/(https?:\/\/[^\s<>"']+)/g).map((part, i) => i % 2 ? `<a href="${esc(part)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>` : esc(part)).join('');
+const preview = v => v ? v.p.file ? (v.p.file.voice ? '🎤 Sprachnachricht' : '📎 ' + safeName(v.p.file.name)) + (v.text ? ' · ' + v.text : '') : v.text : 'Nachricht nicht mehr vorhanden';
+const who = id => id === me.id ? 'Du' : sel.name;
+function attachment(f) {
+  const mime = mimeOf(f), kind = IMG.includes(mime) ? 'img' : AUD.includes(mime) ? 'audio' : 'file';
+  if (kind === 'file') return `<div class="att"><button type="button" class="file" data-file="${esc(f.id)}">${IC.file} <span>${esc(safeName(f.name))}</span> · ${sizeText(+f.size || 0)}</button></div>`;
+  return `<div class="att" data-media="${esc(f.id)}" data-kind="${kind}"><span style="font-size:12px;opacity:.7">${kind === 'img' ? 'Bild' : 'Sprachnachricht'} wird entschlüsselt …</span></div>`;
+}
+function drawMsgs(stick = true) {
+  const box = $('#msgs'); if (!box) return; view = build(); const now = Date.now(); let lastDay = '', hits = 0;
+  const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 80, open = box.querySelector('.mw.act')?.dataset.ref;
+  const media = new Map($$('[data-media].ready', box).map(el => [el.dataset.media, el])); // geladene Anhänge behalten (Audio läuft weiter)
+  box.innerHTML = [...view].map(([key, v]) => { const m = v.m, mine = m.from === me.id, d = new Date(m.ts).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' }); const sep = d !== lastDay ? `<div class="day">${d}</div>` : ''; lastDay = d;
+    const hit = findTerm && preview(v).toLowerCase().includes(findTerm); if (hit) hits++;
+    const counts = {}; for (const [from, e] of v.reacts) { counts[e] ||= { n: 0, mine: false }; counts[e].n++; if (from === me.id) counts[e].mine = true; }
+    const quote = v.p.re ? `<button type="button" class="quote" data-jump="${esc(v.p.re)}"><b>${view.has(v.p.re) ? esc(who(view.get(v.p.re).m.from)) : ''}</b>${esc(preview(view.get(v.p.re)).slice(0, 120))}</button>` : '';
+    return sep + `<div class="mw ${mine ? 'me' : 'them'} ${hit ? 'hit' : ''} ${open === key ? 'act' : ''}" data-ref="${esc(key)}">
+      <div class="tools">${m.dec.ok ? QUICK.slice(0, 4).map(e => `<button type="button" data-react="${e}" title="Reagieren">${e}</button>`).join('') + `<button type="button" data-act="more" title="Weitere Reaktionen">＋</button><button type="button" data-act="reply" title="Antworten">↩</button>${v.text ? '<button type="button" data-act="copy" title="Kopieren">⧉</button>' : ''}${mine && !v.p.file ? '<button type="button" data-act="edit" title="Bearbeiten">✎</button>' : ''}` : ''}${mine ? '<button type="button" data-act="del" title="Für beide löschen">✕</button>' : ''}</div>
+      <div class="m ${m.dec.ok ? '' : 'bad'}">${quote}${v.p.file ? attachment(v.p.file) : ''}${linkify(v.text)}<div class="meta">${m.ttl ? `<span>${IC.clock} ${Math.max(1, Math.round((m.ts + m.ttl - now) / 60000))} min</span>` : ''}${v.edited ? '<span>bearbeitet</span>' : ''}<span>${new Date(m.ts).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}</span>${mine ? `<span class="ticks ${m.ts <= peerRead ? 'read' : ''}" title="${m.ts <= peerRead ? 'gelesen' : 'gesendet'}">${m.ts <= peerRead ? '✓✓' : '✓'}</span>` : m.dec.ok ? `<span title="Signatur geprüft">${IC.lock}</span>` : ''}</div></div>
+      ${Object.keys(counts).length ? `<div class="reacts">${Object.entries(counts).map(([e, c]) => `<button type="button" data-react="${esc(e)}" class="${c.mine ? 'mine' : ''}">${esc(e)}${c.n > 1 ? ' ' + c.n : ''}</button>`).join('')}</div>` : ''}</div>`; }).join('') || '<div class="empty" style="margin:auto;border:0">Noch keine Nachrichten. Sag Hallo.</div>';
+  for (const el of $$('[data-media]', box)) { const old = media.get(el.dataset.media); if (old) { el.replaceWith(old); continue; } loadMedia(el); }
+  if ($('#findN')) $('#findN').textContent = findTerm ? hits + ' Treffer' : '';
+  if (findTerm && !stick) box.querySelector('.mw.hit:last-of-type')?.scrollIntoView({ block: 'nearest' }); else if (stick || atEnd) box.scrollTop = box.scrollHeight;
+}
+async function loadMedia(el) {
+  const id = el.dataset.media, v = [...view.values()].find(x => x.p.file?.id === id); if (!v) return;
+  try { const url = await fileUrl(v.p.file), box = $('#msgs'), end = box && box.scrollHeight - box.scrollTop - box.clientHeight < 120;
+    const node = document.createElement(el.dataset.kind === 'img' ? 'img' : 'audio');
+    if (el.dataset.kind === 'img') { node.alt = safeName(v.p.file.name); node.onload = () => { if (end) box.scrollTop = box.scrollHeight; }; } else node.controls = true;
+    node.src = url; el.replaceChildren(node); el.classList.add('ready');
+  } catch (e) { el.textContent = '⚠ Anhang nicht lesbar: ' + (e.message || 'Schlüssel passt nicht'); }
+}
+function banners() {
+  const b = $('#banners'); if (!b) return;
+  const row = (label, text) => `<div class="banner"><b>${label}</b><span class="grow mute">${esc(text)}</span><button type="button" class="ghost sm" data-act="cancel" aria-label="Abbrechen">✕</button></div>`;
+  b.innerHTML = (reply ? row('↩ Antwort', preview(view.get(reply)).slice(0, 140)) : '') + (editing ? row('✎ Bearbeiten', preview(view.get(editing)).slice(0, 140)) : '') + (pending ? row(pending.voice ? '🎤 Aufnahme' : '📎 Anhang', `${pending.name} · ${sizeText(pending.blob.size)}`) : '');
+}
+function cancelBanner() { if (editing) { $('#txt').value = ''; grow(); } reply = editing = pending = null; banners(); }
+
+// ---------- Senden ----------
+async function post(payload, to, ttl, extra = {}) { await api('/api/msg/send', { method: 'POST', body: { ...await encryptMsg(payload, to, ttl), ...extra } }); }
+const mayWrite = () => !sel.changed || confirm('Der Schlüssel dieser Person hat sich geändert. Trotzdem senden?');
+let sending = false;
+async function submit(e) {
+  e?.preventDefault(); if (sending || !sel?.pub) return; const to = sel, input = $('#txt'), t = input.value.trim(), file = pending, re = reply, ed = editing;
+  if (!t && !file) return; if (ed && !t) return toast('Leer geht nicht. Zum Entfernen die Nachricht löschen.');
+  if (!mayWrite()) return;
+  sending = true; input.value = ''; drafts[to.id] = ''; reply = editing = pending = null; banners(); grow(); $('#emoji').classList.add('hide');
+  try {
+    if (ed) await post({ edit: ed, t }, to, view.get(ed)?.m.ttl || 0, { quiet: true });
+    else { if (file) toast('Verschlüssle und lade hoch …'); const f = file ? await upload(file, to) : null;
+      await post({ t, ...(re ? { re } : {}), ...(f ? { file: f } : {}) }, to, +$('#ttl').value, f ? { file: f.id } : {}); }
+  } catch (err) { toast('Senden fehlgeschlagen: ' + err.message); if (sel?.id === to.id) { $('#txt').value = t; reply = re; editing = ed; pending = file; banners(); grow(); } }
+  finally { sending = false; }
+}
+async function react(key, emoji) {
+  const v = view.get(key); if (!v || !sel?.pub || !mayWrite()) return; const mine = v.reacts.get(me.id);
+  try { await post({ react: key, e: mine === emoji ? '' : emoji }, sel, v.m.ttl || 0, { quiet: true }); } catch (err) { toast(err.message); }
+}
+let typedAt = 0;
+function sendTyping() { if (prefs.typing === false || !sel?.pub || !$('#txt').value || Date.now() - typedAt < 3000) return; typedAt = Date.now(); api('/api/msg/typing/' + sel.id, { method: 'POST' }).catch(() => {}); }
+function markRead() {
+  if (!sel || !keys || document.hidden) return;
+  const theirs = conv.filter(m => m.from === sel.id && !m.dec.p.react && !m.dec.p.edit).reduce((n, m) => Math.max(n, m.ts), 0); if (!theirs) return;
+  const c = contacts.find(x => x.id === sel.id); if (c?.unread) { c.unread = 0; drawContacts(); }
+  if ((prefs.lastRead[sel.id] || 0) >= theirs) return; prefs.lastRead[sel.id] = theirs; Store.set('messenger', prefs);
+  if (prefs.receipts !== false) api('/api/msg/read/' + sel.id, { method: 'POST', body: { ts: theirs } }).catch(() => {});
+}
+
+// ---------- Sprachnachricht ----------
+let recorder = null, recTimer = null;
+async function startRec() {
+  if (recorder || !sel?.pub) return;
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return toast('Dieser Browser kann nicht aufnehmen');
+  const my = convSeq; let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return toast('Kein Zugriff auf das Mikrofon'); }
+  if (my !== convSeq || recorder) return stream.getTracks().forEach(t => t.stop());
+  const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+  const rec = recorder = new MediaRecorder(stream, { ...(type ? { mimeType: type } : {}), audioBitsPerSecond: 32000 }), chunks = [], t0 = Date.now();
+  rec.ondataavailable = e => chunks.push(e.data);
+  rec.onstop = () => { stream.getTracks().forEach(t => t.stop()); clearInterval(recTimer); const keep = rec.keep; if (recorder === rec) recorder = null; banners(); if (!keep || my !== convSeq) return;
+    const mime = (rec.mimeType || 'audio/webm').split(';')[0], secs = Math.max(1, Math.round((Date.now() - t0) / 1000));
+    setPending(new Blob(chunks, { type: mime }), `Sprachnachricht-${secs}s.${mime === 'audio/mp4' ? 'm4a' : mime.split('/')[1]}`, { voice: secs }); if (pending) submit(); };
+  rec.start(1000);
+  $('#banners').innerHTML = `<div class="banner"><span class="rec">● <span id="recT">0:00</span></span><span class="grow mute">Aufnahme läuft</span><button type="button" class="sm ghost" data-act="recStop">Verwerfen</button><button type="button" class="sm primary" data-act="recSend">Senden</button></div>`;
+  recTimer = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); if ($('#recT')) $('#recT').textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); if (s >= 180) stopRec(true); }, 500);
+}
+function stopRec(keep) { if (recorder && recorder.state !== 'inactive') { recorder.keep = keep; recorder.stop(); } }
+
+async function showFp() { $('#fpName').textContent = sel.name; $('#fpThem').textContent = sel.fp; $('#fpMe').textContent = myFp; $('#fpDlg').showModal();
+  $('#fpOk').onclick = () => { prefs.verified[sel.id] = sel.fp; sel.changed = false; Store.set('messenger', prefs); $('#fpDlg').close(); const id = sel.id; loadContacts().then(() => openConv(id)); toast('Als geprüft gespeichert'); }; }
+function connect() {
+  es?.close(); es = new EventSource('/api/msg/stream'); let opened = false;
+  es.onopen = async () => { if (opened) { await loadContacts(); if (sel) openConv(sel.id); } opened = true; }; // nach Verbindungsabbruch Verpasstes nachladen
+  es.onmessage = async e => { const ev = JSON.parse(e.data); if (!keys) return;
+    if (ev.type === 'msg') { const m = ev.msg, other = m.from === me.id ? m.to : m.from; delete typingFrom[m.from];
+      const c = contacts.find(x => x.id === other);
+      if (sel && other === sel.id) { const my = convSeq, dec = await decryptMsg(m, sel); if (my !== convSeq || !keys || conv.some(x => x.id === m.id)) return; conv.push({ ...m, dec }); drawMsgs(m.from === me.id); headline(); }
+      if (c && !m.quiet) { c.last = m.ts; c.lastFrom = m.from; if (m.from === other && !(sel?.id === other && !document.hidden && document.hasFocus())) c.unread++; }
+      if (sel?.id === other && document.hasFocus()) markRead(); drawContacts(); if (!c) loadContacts();
+      if (m.from !== me.id && !m.quiet && document.hidden && 'Notification' in window && Notification.permission === 'granted') new Notification('Neue Nachricht', { body: 'Von ' + (c?.name || '…') + ' (Inhalt verschlüsselt)' }); }
+    if (ev.type === 'del') { const gone = conv.find(m => m.id === ev.id); if (gone) { conv = conv.filter(m => m !== gone); if (reply === ref(gone) || editing === ref(gone)) cancelBanner(); drawMsgs(false); } loadContacts(); }
+    if (ev.type === 'typing') { typingFrom[ev.from] = Date.now() + 5000; drawContacts(); headline(); setTimeout(() => { drawContacts(); headline(); }, 5100); }
+    if (ev.type === 'read' && sel?.id === ev.from) { peerRead = Math.max(peerRead, ev.ts); drawMsgs(false); }
+    if (ev.type === 'presence') { const c = contacts.find(x => x.id === ev.id); if (c) { c.online = ev.online; drawContacts(); headline(); } }
+    if (ev.type === 'keys') { clearTimeout(loading); loading = setTimeout(loadContacts, 200); } };
+}
+
+// ---------- Bedienung ----------
+document.addEventListener('click', async e => {
+  const c = e.target.closest('[data-ct]'); if (c) return openConv(c.dataset.ct);
+  if (!keys || !$('#pane')) return;
+  if (!e.target.closest('#emoji, [data-act="emoji"], [data-act="more"]')) $('#emoji')?.classList.add('hide');
+  const mw = e.target.closest('.mw'); if (!e.target.closest('.tools')) $$('.mw.act').forEach(x => x !== mw && x.classList.remove('act'));
+  const emo = e.target.closest('[data-emo]'); if (emo) { const box = $('#emoji'); if (box.dataset.for) { react(box.dataset.for, emo.dataset.emo); box.classList.add('hide'); } else { const t = $('#txt'), a = t.selectionStart; t.setRangeText(emo.dataset.emo, a, t.selectionEnd, 'end'); t.focus(); grow(); } return; }
+  const r = e.target.closest('[data-react]'); if (r) return react(mw.dataset.ref, r.dataset.react);
+  const j = e.target.closest('[data-jump]'); if (j) { const t = $$('#msgs .mw').find(x => x.dataset.ref === j.dataset.jump); if (t) { t.scrollIntoView({ block: 'center', behavior: 'smooth' }); t.classList.add('act'); } else toast('Die Nachricht gibt es nicht mehr'); return; }
+  const f = e.target.closest('[data-file]'); if (f) { const v = [...view.values()].find(x => x.p.file?.id === f.dataset.file); if (!v) return;
+    try { const a = document.createElement('a'); a.href = await fileUrl(v.p.file); a.download = safeName(v.p.file.name); a.click(); } catch (err) { toast(err.message || 'Anhang nicht lesbar'); } return; }
+  if (e.target.matches('.att img')) { $('#zoomImg').src = e.target.src; return $('#zoomDlg').showModal(); }
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (!act) { if (mw && !e.target.closest('a, audio')) mw.classList.toggle('act'); return; } // Handy: Antippen zeigt die Aktionen
+  const key = mw?.dataset.ref, v = key && view.get(key);
+  if (act === 'back') { $('#chat').classList.remove('open'); if (sel && !editing) drafts[sel.id] = $('#txt').value; stopRec(false); convSeq++; sel = null; drawContacts(); }
+  else if (act === 'find') { $('#findbar').classList.toggle('hide'); if ($('#findbar').classList.contains('hide')) { findTerm = $('#findIn').value = ''; drawMsgs(); } else $('#findIn').focus(); }
+  else if (act === 'attach') { $('#fileIn').value = ''; $('#fileIn').click(); }
+  else if (act === 'emoji') { const box = $('#emoji'); delete box.dataset.for; box.classList.toggle('hide'); }
+  else if (act === 'more') { const box = $('#emoji'); box.dataset.for = key; box.classList.remove('hide'); }
+  else if (act === 'mic') startRec(); else if (act === 'recStop') stopRec(false); else if (act === 'recSend') stopRec(true);
+  else if (act === 'cancel') cancelBanner();
+  else if (act === 'reply' && v) { reply = key; if (editing) { editing = null; $('#txt').value = ''; } banners(); $('#txt').focus(); }
+  else if (act === 'edit' && v) { editing = key; reply = pending = null; $('#txt').value = v.text; grow(); banners(); $('#txt').focus(); }
+  else if (act === 'copy' && v) navigator.clipboard.writeText(v.text).then(() => toast('Kopiert'), () => toast('Kopieren nicht erlaubt'));
+  else if (act === 'del' && v && confirm('Nachricht für beide löschen?')) {
+    // eigene Bearbeitungen derselben Nachricht mitlöschen, damit kein Text zurückbleibt
+    const mine = conv.filter(m => m.from === me.id && m.dec.p.edit === key);
+    try { for (const m of [...mine, v.m]) await api(`/api/msg/conv/${sel.id}/${m.id}`, { method: 'DELETE' }); } catch (err) { toast(err.message); } }
+});
+$('#fileIn').onchange = e => { const f = e.target.files[0]; if (f) setPending(f, f.name); };
+document.addEventListener('paste', e => { if (!keys || e.target.id !== 'txt') return; const f = [...e.clipboardData.files][0]; if (f) { e.preventDefault(); setPending(f, f.name || 'bild.png'); } });
+document.addEventListener('dragover', e => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); if (sel?.pub && keys) $('#pane').classList.add('drop'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) $('#pane')?.classList.remove('drop'); });
+document.addEventListener('drop', e => { if (!e.dataTransfer.types.includes('Files')) return; e.preventDefault(); $('#pane')?.classList.remove('drop'); const f = e.dataTransfer.files[0]; if (f && keys && sel) setPending(f, f.name); });
+window.addEventListener('focus', markRead); document.addEventListener('visibilitychange', markRead);
+setInterval(() => { if (keys && sel) drawMsgs(false); }, 60000); // Restlaufzeiten aktualisieren, abgelaufene ausblenden
+
+// ---------- Sperren & Einstellungen ----------
+function lock() {
+  stopRec(false); keys = null; es?.close(); sel = null; conv = []; view = new Map(); contacts = []; drafts = {}; reply = editing = pending = null; convSeq++; clearTimeout(idleT);
+  for (const p of blobs.values()) p.then(u => URL.revokeObjectURL(u)).catch(() => {}); blobs.clear(); $('#zoomImg').removeAttribute('src'); $$('dialog[open]').forEach(d => d.close()); document.title = 'Messenger · Werkbank'; init();
+}
+let idleT = null;
+function idle() { clearTimeout(idleT); const min = +prefs.autoLock || 0; if (keys && min) idleT = setTimeout(() => { lock(); toast('Tresor automatisch gesperrt'); }, min * 60000); }
+for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, idle, { passive: true });
+$('#lockBtn').onclick = lock;
+$('#setBtn').onclick = () => { $$('#setDlg [data-pref]').forEach(i => i.checked = prefs[i.dataset.pref] !== false); $('#autoLock').value = String(prefs.autoLock || 0); notifyState(); $('#setDlg').showModal(); };
+function notifyState() { const p = 'Notification' in window ? Notification.permission : 'denied'; $('#notify').disabled = p !== 'default'; $('#notifyState').textContent = p === 'granted' ? 'erlaubt' : p === 'denied' ? 'im Browser blockiert oder nicht möglich' : ''; }
+$('#notify').onclick = () => Notification.requestPermission().then(notifyState);
+$('#setDlg').addEventListener('change', async e => { const k = e.target.dataset.pref; if (k) prefs[k] = e.target.checked; else if (e.target.id === 'autoLock') { prefs.autoLock = +e.target.value; idle(); } else return;
+  Store.set('messenger', prefs); if (k === 'showOnline') { await Store.flush(); api('/api/msg/presence', { method: 'POST' }).catch(() => {}); } });
+async function init() { me = await WB.me(); prefs = Object.assign({ lastRead: {}, verified: {} }, await Store.get('messenger', prefs));
+  let rec = null; try { rec = await api('/api/msg/keys'); } catch {} lockView(rec); }
+init();
+</script>
+</body></html>

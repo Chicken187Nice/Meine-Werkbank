@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Pi-hole</title>
+<style>
+  .state { display:flex; align-items:center; gap: 16px; }
+  .orb { width: 58px; height: 58px; border-radius: 50%; display:grid; place-items:center; flex:none; }
+  .orb.ok { background: color-mix(in srgb, var(--good) 18%, transparent); color: var(--good); box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 8%, transparent); }
+  .orb.off { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+  .orb.err { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .warn-it { display:flex; gap: 12px; padding: 12px; border-radius: 10px; background: color-mix(in srgb, var(--warn) 9%, var(--bg)); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); margin-bottom: 8px; font-size: 14px; }
+  .warn-it .i { color: var(--warn); font-weight: 700; }
+  .ring { --p: 0; width: 120px; height: 120px; border-radius: 50%; background: conic-gradient(var(--acc) calc(var(--p) * 1%), var(--bg3) 0); display:grid; place-items:center; margin: 0 auto; }
+  .ring span { width: 96px; height: 96px; border-radius: 50%; background: var(--bg2); display:grid; place-items:center; font: 700 22px var(--f-mono); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>Pi-hole</h1><p>Status, Warnungen und Statistik deines Pi-hole. Warnungen erscheinen auch auf der Startseite, wenn die Glocke an der Kachel an ist. Funktioniert mit Pi-hole v6 und v5.</p></div>
+    <div class="row"><span class="mute" id="upd" style="font-size:12px"></span><button id="refresh">Aktualisieren</button></div>
+  </div>
+  <div id="view"></div>
+  <div id="cfgBox" class="hide" style="margin-top:14px"></div>
+</main>
+<script>
+WB.header('pihole');
+const { $, esc, api, toast, num } = WB;
+let me, S = null;
+const ago = iso => { if (!iso) return '–'; const d = (Date.now() - Date.parse(iso)) / 864e5; return d < 1 ? 'heute' : Math.floor(d) === 1 ? 'gestern' : `vor ${Math.floor(d)} Tagen`; };
+function render() {
+  if (!S) { $('#view').innerHTML = '<div class="panel empty">Lädt …</div>'; return; }
+  if (!S.configured) { $('#view').innerHTML = `<div class="panel"><h2>Noch nicht verbunden</h2><p class="mute" style="margin-top:8px">${me.admin ? 'Trag unten die Adresse deines Pi-hole ein, z. B. <code>http://192.168.178.5</code> oder <code>http://pi.hole</code>.' : 'Ein Admin muss die Verbindung zum Pi-hole einrichten.'}</p></div>`; cfg(); return; }
+  const st = !S.ok ? 'err' : S.blocking && S.blocking !== 'enabled' ? 'off' : 'ok';
+  $('#view').innerHTML = `
+    <div class="panel state" style="margin-bottom:14px"><div class="orb ${st}">${WB.icon('pihole', 26)}</div>
+      <div class="grow"><h2>${st === 'ok' ? 'Schutz aktiv' : st === 'off' ? 'Werbeblocker ausgeschaltet' : 'Nicht erreichbar'}</h2>
+      <div class="mute" style="font-size:13px;margin-top:4px">${esc(S.url)}${S.version ? ' · Pi-hole v' + S.version + (S.ver ? ' (' + esc(S.ver) + ')' : '') : ''}${S.error ? ' · <span class="bad">' + esc(S.error) + '</span>' : ''}</div></div>
+      ${me.admin && S.ok && S.version === 6 ? (S.blocking === 'enabled' ? `<div class="row"><button data-pause="300">5 Min pausieren</button><button class="danger" data-pause="0">Ausschalten</button></div>` : `<button class="primary" id="on">Wieder einschalten</button>`) : ''}</div>
+    ${(S.warnings || []).length ? `<div class="panel" style="margin-bottom:14px"><div class="label" style="margin-bottom:10px">Warnungen (${S.warnings.length})</div>${S.warnings.map(w => `<div class="warn-it"><span class="i">!</span><span>${esc(w)}</span></div>`).join('')}</div>`
+      : S.ok ? '<div class="panel" style="margin-bottom:14px"><span class="good">✓</span> Keine Warnungen vom Pi-hole.</div>' : ''}
+    ${S.ok ? `<div class="side"><div class="panel" style="text-align:center"><div class="label" style="margin-bottom:14px">Heute blockiert</div><div class="ring" style="--p:${(+S.percent || 0).toFixed(0)}"><span>${(+S.percent || 0).toFixed(1).replace('.', ',')} %</span></div></div>
+      <div class="g2">
+        <div class="panel stat"><div class="label">Anfragen heute</div><div class="v">${num(S.total)}</div></div>
+        <div class="panel stat"><div class="label">Davon blockiert</div><div class="v acc">${num(S.blocked)}</div></div>
+        <div class="panel stat"><div class="label">Domains auf Blocklisten</div><div class="v">${num(S.domains)}</div></div>
+        <div class="panel stat"><div class="label">Aktive Geräte</div><div class="v">${num(S.clients)}</div><div class="s">Blocklisten aktualisiert: ${ago(S.gravityUpdated)}</div></div></div></div>` : ''}`;
+  cfg();
+}
+function cfg() { if (!me.admin) return; $('#cfgBox').classList.remove('hide');
+  const c = S && S.cfg || {};
+  $('#cfgBox').innerHTML = `<details class="panel" ${S && !S.configured ? 'open' : ''}><summary style="cursor:pointer;font-weight:600">Verbindung einstellen (Admin)</summary>
+    <form class="stack" id="cf" style="margin-top:12px"><div class="fields"><label class="field"><span>Adresse des Pi-hole</span><input id="u" value="${esc(c.url || '')}" placeholder="http://192.168.178.5"></label>
+    <label class="field"><span>${c.hasPassword ? 'Passwort (leer lassen = unverändert)' : 'Passwort bzw. App-Passwort (v6) oder API-Token (v5)'}</span><input id="pw" type="password" autocomplete="off"></label></div>
+    <p class="faint" style="font-size:12px">Tipp für v6: Lege im Pi-hole unter Einstellungen → Web-Oberfläche/API ein App-Passwort an und nimm das statt deines Login-Passworts. Der Werkbank-Container muss den Pi-hole im Netz erreichen können.</p>
+    <div class="row"><button class="primary">Speichern und testen</button></div></form></details>`;
+  $('#cf').onsubmit = async e => { e.preventDefault(); const body = { url: $('#u').value.trim() }; if ($('#pw').value) body.password = $('#pw').value;
+    try { S = await api('/api/pihole/config', { method: 'PUT', body }); S.cfg = { url: body.url, hasPassword: !!(body.password || c.hasPassword) }; render(); toast(S.ok ? 'Verbunden ✓' : 'Gespeichert, aber: ' + S.error); } catch (err) { toast(err.message); } };
+}
+async function load(force) { try { S = await api('/api/pihole' + (force ? '?frisch' : '')); $('#upd').textContent = 'Stand ' + new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); } catch (e) { S = { configured: true, ok: false, error: e.message }; } render(); }
+document.addEventListener('click', async e => { const b = e.target.closest('[data-pause]');
+  if (b) { if (b.dataset.pause === '0' && !confirm('Werbeblocker wirklich ausschalten?')) return; try { await api('/api/pihole/blocking', { method: 'POST', body: { enable: false, seconds: +b.dataset.pause } }); toast(+b.dataset.pause ? 'Für 5 Minuten pausiert' : 'Ausgeschaltet'); load(true); } catch (err) { toast(err.message); } }
+  if (e.target.id === 'on') { try { await api('/api/pihole/blocking', { method: 'POST', body: { enable: true } }); toast('Wieder aktiv'); load(true); } catch (err) { toast(err.message); } } });
+$('#refresh').onclick = () => load(true);
+(async () => { me = await WB.me(); render(); load(); setInterval(load, 30000); })();
+</script>
+</body></html>

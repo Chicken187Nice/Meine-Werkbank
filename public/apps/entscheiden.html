@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Entscheider</title>
+<style>
+  .mx { border-collapse: separate; border-spacing: 0; width: 100%; }
+  .mx th, .mx td { padding: 8px; border-bottom: 1px solid var(--line); text-align: center; }
+  .mx th:first-child, .mx td:first-child { text-align: left; }
+  .mx input { text-align: center; padding: 6px; }
+  .mx td:first-child input, .mx th input { text-align: left; }
+  .scorebtn { display:inline-flex; gap:2px; } .scorebtn button { width:28px; height:28px; padding:0; font: 600 12px var(--f-mono); }
+  .scorebtn button.on { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); }
+  .res .it { gap: 14px; } .res .rank { font: 700 22px var(--f-mono); width: 30px; color: var(--faint); }
+  .res .it:first-child .rank { color: var(--acc); }
+  #wheel { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
+  .wheel-wrap { position: relative; } .pointer { position:absolute; top:-4px; left:50%; transform: translateX(-50%); width:0; height:0; border-left:12px solid transparent; border-right:12px solid transparent; border-top:22px solid var(--text); z-index: 2; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">09 · Spiel</div><h1>Entscheider</h1><p>Wichtige Entscheidungen bekommen eine gewichtete Matrix, alles andere das Glücksrad. Tipp: Wenn dich das Ergebnis des Rads enttäuscht, weißt du, was du eigentlich willst.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="mx">Matrix</button><button data-t="rad">Glücksrad</button></div>
+  </div>
+
+  <section id="t-mx" class="stack">
+    <div class="panel"><div class="panel-h"><input id="title" placeholder="Worum geht's? z. B. Welcher Laptop?" style="font: 600 18px var(--f-display); border:0; background:none; padding:0"><div class="row"><button class="sm" id="addO">+ Option</button><button class="sm" id="addC">+ Kriterium</button><button class="sm ghost danger" id="clr">Neu</button></div></div>
+      <div class="scroll"><table class="mx" id="mx"></table></div>
+      <p class="faint" style="font-size:12px;margin-top:10px">Gewicht 1–5: Wie wichtig ist dir das Kriterium? Bewertung 1–5: Wie gut erfüllt die Option es?</p></div>
+    <div class="g2"><div class="panel"><div class="label" style="margin-bottom:8px">Ergebnis</div><div class="list res" id="res"></div></div>
+      <div class="panel"><div class="label" style="margin-bottom:8px">Gegencheck</div><div id="check" class="mute" style="font-size:14px"></div></div></div>
+  </section>
+
+  <section id="t-rad" class="hide side">
+    <div class="panel stack"><div class="label">Optionen (eine pro Zeile)</div>
+      <textarea id="opts" style="min-height:220px">Pizza
+Sushi
+Burger
+Selbst kochen
+Döner
+Pasta</textarea>
+      <button class="primary" id="spin">Drehen</button>
+      <div class="sunk" style="text-align:center"><span class="label">Ergebnis</span><div style="font:700 26px var(--f-display);margin-top:6px" id="win">–</div></div></div>
+    <div class="panel"><div class="wheel-wrap"><div class="pointer"></div><canvas id="wheel" width="840" height="840"></canvas></div></div>
+  </section>
+</main>
+<script>
+WB.header('entscheiden');
+const { $, $$, esc, Store } = WB;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const DEF = { title: '', crit: [{ n: 'Preis', w: 4 }, { n: 'Qualität', w: 5 }, { n: 'Bauchgefühl', w: 3 }], opts: [{ n: 'Option A', s: [3,4,3] }, { n: 'Option B', s: [4,3,4] }] };
+let D = { mx: structuredClone(DEF), wheel: '' };
+const save = () => Store.set('entscheiden', D);
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#tabs button').forEach(x => x.classList.toggle('on', x===b)); ['mx','rad'].forEach(t => $('#t-'+t).classList.toggle('hide', t !== b.dataset.t)); drawWheel(); };
+
+function drawMx() {
+  const M = D.mx; $('#title').value = M.title;
+  $('#mx').innerHTML = `<tr><th style="min-width:160px"><span class="label">Option ↓ / Kriterium →</span></th>${M.crit.map((c,j) => `<th style="min-width:150px"><div class="row" style="flex-wrap:nowrap;gap:4px"><input data-cn="${j}" value="${esc(c.n)}"><button class="ghost sm" data-cdel="${j}">✕</button></div>
+    <div class="row" style="justify-content:center;margin-top:6px;gap:6px"><span class="faint" style="font-size:11px">Gewicht</span><span class="scorebtn">${[1,2,3,4,5].map(v => `<button class="${c.w===v?'on':''}" data-cw="${j}" data-v="${v}">${v}</button>`).join('')}</span></div></th>`).join('')}<th></th></tr>` +
+    M.opts.map((o,i) => `<tr><td><input data-on="${i}" value="${esc(o.n)}"></td>${M.crit.map((c,j) => `<td><span class="scorebtn">${[1,2,3,4,5].map(v => `<button class="${o.s[j]===v?'on':''}" data-os="${i}" data-c="${j}" data-v="${v}">${v}</button>`).join('')}</span></td>`).join('')}<td><button class="ghost sm danger" data-odel="${i}">✕</button></td></tr>`).join('');
+  result();
+}
+function result() {
+  const M = D.mx, maxW = M.crit.reduce((s,c)=>s+c.w*5,0) || 1;
+  const r = M.opts.map(o => ({ n: o.n, v: M.crit.reduce((s,c,j)=>s + c.w*(o.s[j]||0), 0) })).sort((a,b)=>b.v-a.v);
+  $('#res').innerHTML = r.length ? r.map((x,i) => `<div class="it"><span class="rank">${i+1}</span><div class="grow"><div class="row between"><b>${esc(x.n)}</b><span class="mono">${Math.round(x.v/maxW*100)} %</span></div><div class="bar" style="margin-top:6px"><i style="width:${x.v/maxW*100}%"></i></div></div></div>`).join('') : '<div class="empty">Füg Optionen hinzu</div>';
+  if (r.length >= 2) {
+    const gap = (r[0].v - r[1].v) / maxW * 100;
+    const top = M.crit.slice().sort((a,b)=>b.w-a.w)[0];
+    $('#check').innerHTML = gap < 5 ? `<b style="color:var(--text)">Knapp.</b> ${esc(r[0].n)} und ${esc(r[1].n)} trennen nur ${gap.toFixed(0)} Prozentpunkte. Frag dich: Bei welchem Ergebnis bist du erleichtert? Das ist deine Antwort.`
+      : `<b style="color:var(--text)">${esc(r[0].n)}</b> liegt klar vorne (+${gap.toFixed(0)} Punkte). Dein wichtigstes Kriterium ist <b style="color:var(--text)">${esc(top?.n||'')}</b>. Wenn du dort die Gewichtung um 1 änderst und sich das Ergebnis dreht, ist die Entscheidung weniger stabil, als sie aussieht.`;
+  } else $('#check').textContent = 'Mindestens zwei Optionen nötig.';
+}
+document.addEventListener('input', e => { const d = e.target.dataset; const M = D.mx;
+  if (d.cn !== undefined) M.crit[d.cn].n = e.target.value; if (d.on !== undefined) M.opts[d.on].n = e.target.value;
+  if (e.target.id === 'title') M.title = e.target.value; if (e.target.id === 'opts') { D.wheel = e.target.value; drawWheel(); }
+  save(); result(); });
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const d = b.dataset, M = D.mx;
+  if (d.cw) { M.crit[d.cw].w = +d.v; } else if (d.os) { M.opts[d.os].s[d.c] = +d.v; }
+  else if (d.cdel) { M.crit.splice(+d.cdel,1); M.opts.forEach(o => o.s.splice(+d.cdel,1)); }
+  else if (d.odel) { M.opts.splice(+d.odel,1); } else return;
+  save(); drawMx(); });
+$('#addO').onclick = () => { D.mx.opts.push({ n: 'Option ' + String.fromCharCode(65 + D.mx.opts.length), s: D.mx.crit.map(() => 3) }); save(); drawMx(); };
+$('#addC').onclick = () => { D.mx.crit.push({ n: 'Kriterium', w: 3 }); D.mx.opts.forEach(o => o.s.push(3)); save(); drawMx(); };
+$('#clr').onclick = () => { if (confirm('Neue Matrix anfangen?')) { D.mx = structuredClone(DEF); save(); drawMx(); } };
+
+// Glücksrad
+const W = $('#wheel'), wx = W.getContext('2d'); let rot = 0, spinning = false;
+const items = () => $('#opts').value.split('\n').map(s => s.trim()).filter(Boolean);
+function drawWheel() {
+  const it = items(), n = Math.max(1, it.length), R = W.width/2 - 10, c = W.width/2;
+  const acc = css('--acc'), bg3 = css('--bg3'), bg2 = css('--bg2'), text = css('--text'), ink = css('--acc-ink'), line = css('--line2');
+  wx.clearRect(0,0,W.width,W.height);
+  it.forEach((t,i) => { const a0 = rot + i*2*Math.PI/n - Math.PI/2, a1 = a0 + 2*Math.PI/n;
+    wx.beginPath(); wx.moveTo(c,c); wx.arc(c,c,R,a0,a1); wx.closePath(); wx.fillStyle = i%2 ? bg3 : (i%4===0 ? acc : bg2); wx.fill(); wx.strokeStyle = line; wx.lineWidth = 2; wx.stroke();
+    wx.save(); wx.translate(c,c); wx.rotate((a0+a1)/2); wx.textAlign = 'right'; wx.fillStyle = (i%2===0 && i%4===0) ? ink : text; wx.font = '600 30px Bahnschrift, Segoe UI, sans-serif';
+    wx.fillText(t.length > 18 ? t.slice(0,17)+'…' : t, R-28, 10); wx.restore(); });
+  wx.beginPath(); wx.arc(c,c,46,0,7); wx.fillStyle = bg2; wx.fill(); wx.strokeStyle = acc; wx.lineWidth = 4; wx.stroke();
+}
+$('#spin').onclick = () => { if (spinning) return; const it = items(); if (it.length < 2) return $('#win').textContent = 'Mind. 2 Optionen';
+  spinning = true; $('#win').textContent = '…'; const start = rot, extra = 8*Math.PI + Math.random()*2*Math.PI, t0 = performance.now(), dur = 4200;
+  (function a(t) { const p = Math.min(1, (t - t0)/dur), e = 1 - Math.pow(1-p, 4); rot = start + extra*e; drawWheel();
+    if (p < 1) requestAnimationFrame(a); else { spinning = false; const n = it.length; const ang = ((-rot) % (2*Math.PI) + 2*Math.PI) % (2*Math.PI); $('#win').textContent = it[Math.floor(ang / (2*Math.PI/n)) % n]; } })(t0); };
+document.addEventListener('wb-theme', drawWheel);
+(async () => { D = Object.assign(D, await Store.get('entscheiden', D)); if (D.wheel) $('#opts').value = D.wheel; drawMx(); drawWheel(); })();
+</script>
+</body></html>

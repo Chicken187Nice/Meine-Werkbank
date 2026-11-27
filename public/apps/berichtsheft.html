@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Berichtsheft</title>
+<style>
+  .weeks { max-height: 520px; overflow: auto; }
+  .wk { width:100%; justify-content: space-between; background: transparent; border-color: transparent; padding: 8px 10px; font-weight: 500; }
+  .wk.on { background: var(--bg3); border-color: var(--line2); }
+  .st { width: 10px; height: 10px; border-radius: 50%; display:inline-block; border: 2px solid var(--line2); }
+  .st.part { background: var(--warn); border-color: var(--warn); } .st.full { background: var(--acc); border-color: var(--acc); } .st.sig { background: var(--good); border-color: var(--good); }
+  .day { display:grid; grid-template-columns: 110px 1fr; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .day:last-child { border-bottom: 0; }
+  .day .dn b { display:block; font: 600 15px var(--f-display); } .day .dn span { font-size: 12px; color: var(--mute); }
+  .day textarea { min-height: 70px; }
+  .snips { display:none; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .day:focus-within .snips, .day:hover .snips { display:flex; }
+  .snips button { font-size: 11px; padding: 3px 8px; }
+  .sheet { background: #fff; color: #111; padding: 34px 40px; font: 12px/1.5 "Segoe UI", sans-serif; display: none; }
+  .sheet h2 { font: 700 18px "Segoe UI", sans-serif; margin-bottom: 10px; }
+  .sheet table { width: 100%; border-collapse: collapse; margin-top: 12px; } .sheet td, .sheet th { border: 1px solid #999; padding: 6px 8px; vertical-align: top; text-align: left; }
+  .sheet .sig { display:grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 50px; } .sheet .sig div { border-top: 1px solid #333; padding-top: 4px; font-size: 11px; }
+  @media print { .sheet { display: block; } body > *:not(.sheet) { display: none !important; } }
+  @media (max-width: 700px) { .day { grid-template-columns: 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Ausbildung</div><h1>Berichtsheft</h1><p>Dein Ausbildungsnachweis Woche für Woche. Ein Klick auf einen Baustein fügt typische Tätigkeiten ein. Ausdrucken oder als PDF speichern mit Unterschriftsfeldern für dich und deinen Ausbilder.</p></div>
+    <div class="row"><button id="cfgBtn">Angaben</button><button class="primary" id="print">Drucken / PDF</button></div>
+  </div>
+  <div class="side">
+    <div class="stack">
+      <div class="panel"><div class="g2"><div class="stat"><div class="label">Fertig</div><div class="v acc" id="sDone">0</div></div><div class="stat"><div class="label">Fehlen</div><div class="v" id="sMiss">0</div></div></div>
+        <div class="bar" style="margin-top:12px"><i id="sBar"></i></div><div class="mute" style="font-size:12px;margin-top:8px" id="sYear"></div></div>
+      <div class="panel tight"><div class="label" style="padding:6px 6px 10px">Wochen</div><div class="weeks" id="weeks"></div></div>
+    </div>
+    <div class="panel" id="ed"></div>
+  </div>
+</main>
+<div class="sheet" id="sheet"></div>
+<dialog id="cfg"><form method="dialog" class="stack" id="cf">
+  <h3>Angaben für den Nachweis</h3>
+  <label class="field"><span>Name</span><input name="nm"></label>
+  <label class="field"><span>Ausbildungsberuf</span><input name="beruf"></label>
+  <div class="fields"><label class="field"><span>Ausbildungsbeginn</span><input type="date" name="start" required></label><label class="field"><span>Abteilung</span><input name="abt"></label></div>
+  <label class="field"><span>Ausbildungsbetrieb</span><input name="firma"></label>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+</form></dialog>
+<script>
+WB.header('berichtsheft');
+const { $, $$, esc, ymd, parseYmd, today, Store, toast } = WB;
+let D = { cfg: { nm: '', beruf: 'Fachinformatiker für Anwendungsentwicklung', start: '', abt: '', firma: '' }, weeks: {} }, sel = null;
+const save = () => Store.set('berichtsheft', D);
+const DN = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'];
+const ORTE = ['Betrieb', 'Berufsschule', 'Urlaub', 'Krank', 'Feiertag', 'Überbetrieblich'];
+const SNIP = { Betrieb: ['Java-Entwicklung an Feature', 'Bugfixing', 'Code-Review', 'Daily Scrum', 'Unit-Tests geschrieben (JUnit)', 'Git: Branch, Merge Request', 'Datenbankabfragen (SQL)', 'Dokumentation geschrieben', 'Einarbeitung in neues Projekt', 'Pair Programming'],
+  Berufsschule: ['Anwendungsentwicklung', 'Datenbanken', 'IT-Systeme', 'Netzwerktechnik', 'Wirtschaft und Soziales', 'Englisch', 'Deutsch', 'Projektarbeit'] };
+const monday = d => { const x = new Date(d); x.setHours(12); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const kw = d => { const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const n = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - n); return Math.ceil(((x - new Date(Date.UTC(x.getUTCFullYear(), 0, 1))) / 864e5 + 1) / 7); };
+function allWeeks() { if (!D.cfg.start) return [ymd(monday(new Date()))]; const out = []; let d = monday(parseYmd(D.cfg.start)); const end = monday(new Date());
+  while (d <= end) { out.push(ymd(d)); d.setDate(d.getDate() + 7); }
+  return out.length ? out.reverse() : [ymd(end)]; } // Beginn liegt in der Zukunft: aktuelle Woche zeigen
+function wk(k) { return D.weeks[k] || (D.weeks[k] = { days: DN.map(() => ({ ort: 'Betrieb', h: 8, txt: '' })), signed: false }); }
+function status(k) { const w = D.weeks[k]; if (!w) return ''; if (w.signed) return 'sig'; const n = w.days.filter(x => x.txt.trim() || ['Urlaub', 'Krank', 'Feiertag'].includes(x.ort)).length; return n === 5 ? 'full' : n ? 'part' : ''; }
+function renderList() { const l = allWeeks();
+  const done = l.filter(k => ['full', 'sig'].includes(status(k))).length;
+  $('#sDone').textContent = done; $('#sMiss').textContent = l.length - done; $('#sBar').style.width = (l.length ? done / l.length * 100 : 0) + '%';
+  if (D.cfg.start) { const s = parseYmd(D.cfg.start), y = Math.floor((Date.now() - s) / (365.25 * 864e5)) + 1; $('#sYear').textContent = y > 0 ? `${y}. Ausbildungsjahr · seit ${s.toLocaleDateString('de-DE')}` : `Ausbildung beginnt am ${s.toLocaleDateString('de-DE')}`; }
+  else $('#sYear').innerHTML = '<span class="warn">Trag unter „Angaben“ deinen Ausbildungsbeginn ein</span>';
+  $('#weeks').innerHTML = l.map(k => { const d = parseYmd(k), f = new Date(d); f.setDate(f.getDate() + 4);
+    return `<button class="wk ${k === sel ? 'on' : ''}" data-w="${k}"><span>KW ${kw(d)} <span class="faint" style="font-size:12px">${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}–${f.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' })}</span></span><span class="st ${status(k)}"></span></button>`; }).join(''); }
+function renderEd() {
+  const w = wk(sel), d0 = parseYmd(sel);
+  $('#ed').innerHTML = `<div class="row between"><div><div class="label">Kalenderwoche ${kw(d0)}</div><h2 style="margin-top:6px">${d0.toLocaleDateString('de-DE', { day: '2-digit', month: 'long' })} – ${new Date(d0.getTime() + 4 * 864e5).toLocaleDateString('de-DE', { day: '2-digit', month: 'long', year: 'numeric' })}</h2></div>
+    <label class="row" style="gap:8px"><input type="checkbox" id="signed" ${w.signed ? 'checked' : ''}> vom Ausbilder abgezeichnet</label></div>
+    ${w.days.map((x, i) => { const d = new Date(d0); d.setDate(d.getDate() + i); return `<div class="day"><div class="dn"><b>${DN[i]}</b><span>${d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}</span>
+      <select data-i="${i}" data-k="ort" style="margin-top:8px;font-size:12px;padding:5px">${ORTE.map(o => `<option ${o === x.ort ? 'selected' : ''}>${o}</option>`).join('')}</select>
+      <div class="row" style="gap:4px;margin-top:6px;flex-wrap:nowrap"><input data-i="${i}" data-k="h" type="number" min="0" max="12" step=".5" value="${x.h}" style="width:64px;padding:5px;font-size:12px"><span class="faint" style="font-size:12px">Std.</span></div></div>
+      <div><textarea data-i="${i}" data-k="txt" placeholder="${['Urlaub', 'Krank', 'Feiertag'].includes(x.ort) ? x.ort : 'Was hast du gemacht und gelernt?'}">${esc(x.txt)}</textarea>
+      <div class="snips">${(SNIP[x.ort] || []).map(s => `<button class="chip" data-snip="${i}" data-s="${esc(s)}">+ ${esc(s)}</button>`).join('')}</div></div></div>`; }).join('')}
+    <div class="row between" style="margin-top:12px"><span class="mute" style="font-size:13px">Summe: <b class="mono" style="color:var(--text)">${w.days.reduce((s, x) => s + (+x.h || 0), 0)} Std.</b></span><span class="faint" style="font-size:12px">Wird automatisch gespeichert</span></div>`;
+}
+$('#ed').addEventListener('input', e => { const t = e.target; if (t.dataset.i === undefined) return; const w = wk(sel), x = w.days[+t.dataset.i];
+  x[t.dataset.k] = t.dataset.k === 'h' ? +t.value : t.value; save(); renderList(); if (t.dataset.k === 'ort') renderEd(); });
+$('#ed').addEventListener('change', e => { if (e.target.id === 'signed') { wk(sel).signed = e.target.checked; save(); renderList(); } });
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.w) { sel = b.dataset.w; renderList(); renderEd(); }
+  if (b.dataset.snip !== undefined) { const x = wk(sel).days[+b.dataset.snip]; x.txt = (x.txt.trim() ? x.txt.trim() + '\n' : '') + '• ' + b.dataset.s; save(); renderEd(); renderList(); } });
+$('#cfgBtn').onclick = () => { const f = $('#cf'); for (const k of ['nm', 'beruf', 'start', 'abt', 'firma']) f[k].value = D.cfg[k] || ''; $('#cfg').showModal(); };
+$('#cfg').addEventListener('close', () => { if ($('#cfg').returnValue !== 'ok') return; const f = $('#cf'); for (const k of ['nm', 'beruf', 'start', 'abt', 'firma']) D.cfg[k] = f[k].value; save(); renderList(); });
+$('#print').onclick = () => { const w = wk(sel), d0 = parseYmd(sel), c = D.cfg;
+  $('#sheet').innerHTML = `<h2>Ausbildungsnachweis · KW ${kw(d0)} / ${d0.getFullYear()}</h2>
+    <div>Name: <b>${esc(c.nm)}</b> &nbsp;·&nbsp; Ausbildungsberuf: <b>${esc(c.beruf)}</b></div><div>Betrieb: ${esc(c.firma)} &nbsp;·&nbsp; Abteilung: ${esc(c.abt)} &nbsp;·&nbsp; Zeitraum: ${d0.toLocaleDateString('de-DE')} – ${new Date(d0.getTime() + 4 * 864e5).toLocaleDateString('de-DE')}</div>
+    <table><tr><th style="width:90px">Tag</th><th style="width:100px">Ort</th><th>Tätigkeiten / Unterrichtsthemen</th><th style="width:50px">Std.</th></tr>
+    ${w.days.map((x, i) => `<tr><td>${DN[i]}</td><td>${esc(x.ort)}</td><td style="white-space:pre-wrap">${esc(x.txt)}</td><td>${x.h}</td></tr>`).join('')}</table>
+    <div class="sig"><div>Datum, Unterschrift Auszubildende/r</div><div>Datum, Unterschrift Ausbilder/in</div></div>`; window.print(); };
+(async () => { D = Object.assign(D, await Store.get('berichtsheft', D)); sel = allWeeks()[0]; renderList(); renderEd(); if (!D.cfg.start) $('#cfgBtn').click(); })();
+</script>
+</body></html>

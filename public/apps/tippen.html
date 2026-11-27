@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Tipp-Trainer</title>
+<style>
+  .text { font: 22px/1.75 var(--f-mono); color: var(--faint); white-space: pre-wrap; word-break: break-word; min-height: 160px; cursor: text; position: relative; }
+  .text.code { font-size: 17px; line-height: 1.6; }
+  .text .ok { color: var(--text); } .text .err { color: var(--bad); background: color-mix(in srgb, var(--bad) 18%, transparent); border-radius: 2px; }
+  .text .cur { box-shadow: -2px 0 0 var(--acc); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { box-shadow: -2px 0 0 transparent; } }
+  #hidden { position: absolute; left: 0; width: 1px; opacity: 0; pointer-events: none; height: 0; }
+  .spark { display:flex; align-items:end; gap:4px; height:90px; }
+  .spark i { flex:1; background: var(--acc); border-radius: 3px 3px 0 0; min-height:3px; opacity:.85; }
+  .focus-hint { position:absolute; inset:0; display:grid; place-items:center; background: color-mix(in srgb, var(--bg2) 75%, transparent); font: 600 15px var(--f-body); color: var(--text); backdrop-filter: blur(2px); border-radius: var(--r); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">07 · Lernen</div><h1>Tipp-Trainer</h1><p>Schneller tippen heißt schneller denken. Für dich gibt es neben deutschen Texten einen Code-Modus mit C#- und Java-Zeilen, inklusive Klammern und Semikolons.</p></div>
+    <div class="row"><div class="tabs" id="mode"><button class="on" data-m="de">Deutsch</button><button data-m="code">Code</button></div><button id="new">Neuer Text <span class="kbd">Tab</span></button></div>
+  </div>
+  <div class="g4" style="margin-bottom:14px">
+    <div class="panel stat"><div class="label">Tempo</div><div class="v acc" id="wpm">0</div><div class="s">Wörter / Minute</div></div>
+    <div class="panel stat"><div class="label">Genauigkeit</div><div class="v" id="acc">100 %</div><div class="s" id="errs">0 Fehler</div></div>
+    <div class="panel stat"><div class="label">Zeit</div><div class="v" id="time">0,0 s</div><div class="s" id="prog">0 %</div></div>
+    <div class="panel stat"><div class="label">Bestwert</div><div class="v" id="best">–</div><div class="s" id="avg"></div></div>
+  </div>
+  <div class="panel" style="padding:28px" id="box">
+    <div class="text" id="text"></div>
+    <input id="hidden" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div class="focus-hint hide" id="hint">Klicken, um weiterzutippen</div>
+  </div>
+  <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Letzte Runden</span><span class="mute" style="font-size:12px" id="cnt"></span></div><div class="spark" id="spark"></div></div>
+</main>
+<script>
+WB.header('tippen');
+const { $, $$, esc, Store, num } = WB;
+const DE = [
+  'Wer morgens zuerst die schwierigste Aufgabe erledigt, hat den Rest des Tages Rückenwind.',
+  'Ein guter Plan heute ist besser als ein perfekter Plan nächste Woche.',
+  'Der Zug nach München hatte wieder Verspätung, also las ich noch ein Kapitel und trank meinen Kaffee in Ruhe.',
+  'Kleine Schritte, jeden Tag wiederholt, bringen weiter als große Sprünge, die man nach einer Woche wieder aufgibt.',
+  'Am Wochenende wollen wir an den See fahren, Brotzeit mitnehmen und erst zurückkommen, wenn die Sonne untergeht.',
+  'Programmieren lernt man nicht durch Lesen, sondern durch Fehler, die man selbst gemacht und selbst gefunden hat.',
+  'Die Berge waren noch verschneit, aber unten im Tal blühten schon die ersten Kirschbäume.',
+  'Bevor du eine Frage stellst, versuch das Problem in einem Satz zu beschreiben. Oft findest du die Antwort dabei selbst.',
+  'Ein Server, der nachts um drei ausfällt, merkt sich immer genau den Abend, an dem niemand Bereitschaft hat.',
+  'Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich.'
+];
+const CODE = [
+  'var namen = personen.Where(p => p.Alter >= 18).Select(p => p.Name).ToList();',
+  'public string Name { get; set; }',
+  'for (int i = 0; i < liste.Count; i++) { summe += liste[i]; }',
+  'if (int.TryParse(eingabe, out int zahl)) Console.WriteLine($"Zahl: {zahl}");',
+  'Map<String, Integer> zaehler = new HashMap<>();',
+  'public override string ToString() => $"{Vorname} {Nachname}";',
+  'List<String> r = list.stream().filter(s -> s.length() > 3).collect(Collectors.toList());',
+  'using var reader = new StreamReader("daten.csv");',
+  'private readonly Dictionary<string, int> _lager = new();',
+  'public record Punkt(int X, int Y);',
+  'async Task<string> LadeAsync() { return await http.GetStringAsync(url); }',
+  'try { Verbinde(); } catch (IOException ex) { Log(ex.Message); } finally { Schliesse(); }'
+];
+let D = { runs: [] }, mode = 'de', target = '', typed = '', start = 0, errors = 0, timer, done = false;
+const save = () => Store.set('tippen', D);
+
+function pick() {
+  const src = mode === 'de' ? DE : CODE;
+  if (mode === 'code') { const a = [...src].sort(() => Math.random()-.5).slice(0, 3); return a.join('\n'); }
+  let t = src[Math.floor(Math.random()*src.length)];
+  if (t.length < 120) { let u; do { u = src[Math.floor(Math.random()*src.length)]; } while (u === t); t += ' ' + u; }
+  return t;
+}
+function reset() { target = pick(); typed = ''; start = 0; errors = 0; done = false; clearInterval(timer); $('#hidden').value = ''; draw(); stats(); $('#hidden').focus(); }
+function draw() {
+  $('#text').classList.toggle('code', mode === 'code');
+  $('#text').innerHTML = [...target].map((c, i) => {
+    const cls = i < typed.length ? (typed[i] === c ? 'ok' : 'err') : i === typed.length ? 'cur' : '';
+    const ch = c === '\n' ? '↵\n' : c;
+    return `<span class="${cls}">${esc(ch)}</span>`;
+  }).join('') + (typed.length === target.length ? '<span class="cur"> </span>' : '');
+}
+function stats() {
+  const t = start ? (Date.now() - start) / 1000 : 0;
+  const correct = [...typed].filter((c, i) => c === target[i]).length;
+  const wpm = t > 1 ? correct / 5 / (t / 60) : 0;
+  const acc = typed.length + errors ? (Math.max(0, typed.length - errors) / typed.length * 100) : 100;
+  $('#wpm').textContent = Math.round(wpm); $('#acc').textContent = (isFinite(acc) ? acc : 100).toFixed(0) + ' %';
+  $('#errs').textContent = errors + ' Fehler'; $('#time').textContent = num(t, 1) + ' s'; $('#prog').textContent = Math.round(typed.length / target.length * 100) + ' %';
+  return { wpm, acc, t };
+}
+function renderHist() {
+  const r = D.runs.filter(x => x.mode === mode); const last = r.slice(-30);
+  const best = Math.max(0, ...r.map(x => x.wpm)); const avg = last.length ? last.reduce((s,x)=>s+x.wpm,0)/last.length : 0;
+  $('#best').textContent = r.length ? Math.round(best) : '–'; $('#avg').textContent = r.length ? `Ø ${Math.round(avg)} (letzte ${last.length})` : 'noch keine Runde';
+  const mx = Math.max(10, ...last.map(x => x.wpm));
+  $('#spark').innerHTML = last.length ? last.map(x => `<i style="height:${x.wpm/mx*100}%" title="${Math.round(x.wpm)} WPM · ${x.acc.toFixed(0)} %"></i>`).join('') : '<div class="faint" style="margin:auto">Tipp los, hier erscheinen deine Runden</div>';
+  $('#cnt').textContent = r.length + ' Runden ' + (mode === 'de' ? 'Deutsch' : 'Code');
+}
+$('#hidden').addEventListener('input', e => {
+  if (done) return; const v = e.target.value;
+  if (!start && v.length) { start = Date.now(); timer = setInterval(stats, 200); }
+  if (v.length > typed.length) { const i = v.length - 1; if (v[i] !== target[i]) errors++; }
+  typed = v.slice(0, target.length); draw(); stats();
+  if (typed.length === target.length) { done = true; clearInterval(timer); const s = stats();
+    D.runs.push({ mode, wpm: s.wpm, acc: s.acc, d: Date.now() }); D.runs = D.runs.slice(-300); save(); renderHist(); }
+});
+$('#hidden').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); const el = e.target; el.value += '\n'; el.dispatchEvent(new Event('input')); }
+  if (e.key === 'Tab') { e.preventDefault(); reset(); }
+});
+$('#hidden').addEventListener('blur', () => $('#hint').classList.remove('hide'));
+$('#hidden').addEventListener('focus', () => $('#hint').classList.add('hide'));
+$('#box').onclick = () => $('#hidden').focus();
+$('#new').onclick = reset;
+$('#mode').onclick = e => { const b = e.target.closest('button'); if (!b) return; mode = b.dataset.m; $$('#mode button').forEach(x => x.classList.toggle('on', x === b)); renderHist(); reset(); };
+(async () => { D = await Store.get('tippen', D); renderHist(); reset(); })();
+</script>
+</body></html>

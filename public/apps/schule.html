@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Schule</title>
+<style>
+  .plan { display:grid; grid-template-columns: 56px repeat(5, minmax(0,1fr)); gap: 6px; }
+  .plan .h { font: 600 12px var(--f-mono); color: var(--mute); text-align:center; padding: 6px 0; }
+  .plan .h.today { color: var(--acc); }
+  .plan .n { font: 600 12px var(--f-mono); color: var(--faint); display:flex; flex-direction:column; justify-content:center; align-items:center; line-height:1.2; }
+  .cell { min-height: 54px; border: 1px dashed var(--line2); border-radius: 9px; padding: 6px 8px; cursor: pointer; font-size: 13px; background: transparent; text-align: left; display:block; width:100%; color: var(--text); }
+  .cell.f { border-style: solid; border-color: color-mix(in srgb, var(--sc) 55%, transparent); background: color-mix(in srgb, var(--sc) 16%, var(--bg2)); }
+  .cell b { display:block; font-size: 13px; } .cell span { font-size: 11px; color: var(--mute); }
+  .cell.now { box-shadow: 0 0 0 2px var(--acc); }
+  .subj { padding: 12px 0; border-bottom: 1px solid var(--line); } .subj:last-child { border-bottom: 0; }
+  .grades { display:flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .gr { font: 700 13px var(--f-mono); padding: 3px 8px; border-radius: 7px; border: 1px solid var(--line2); cursor: pointer; background: var(--bg); color: var(--text); }
+  .gr.g1, .gr.g2 { color: var(--good); } .gr.g4 { color: var(--warn); } .gr.g5, .gr.g6 { color: var(--bad); }
+  .avg { font: 700 22px var(--f-mono); }
+  @media (max-width: 760px) { .plan { grid-template-columns: 40px repeat(5, minmax(0,1fr)); gap: 3px; } .cell { min-height: 46px; padding: 4px; } .cell span { display:none; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Ausbildung</div><h1>Schule</h1><p>Berufsschul-Stundenplan und Noten mit Gewichtung. Klick auf ein Feld, um es zu bearbeiten. Die aktuelle Stunde ist markiert, und die Startseite zeigt dir die Stunden von heute.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="plan">Stundenplan</button><button data-t="noten">Noten</button></div>
+  </div>
+  <section id="t-plan" class="panel"><div class="plan" id="plan"></div></section>
+  <section id="t-noten" class="hide side">
+    <div class="stack">
+      <div class="panel stat"><div class="label">Gesamtschnitt</div><div class="v acc" id="total">–</div><div class="s" id="totalS"></div></div>
+      <form class="panel stack" id="gF"><div class="label">Note eintragen</div>
+        <label class="field"><span>Fach</span><input id="gS" list="subjects" required></label><datalist id="subjects"></datalist>
+        <div class="fields"><label class="field"><span>Note (1–6)</span><input id="gV" type="number" min="1" max="6" step=".5" required></label>
+        <label class="field"><span>Art</span><select id="gT"><option value="2">Schulaufgabe (×2)</option><option value="1">Stegreifaufgabe / Ex (×1)</option><option value="1">Mündlich (×1)</option><option value="1">Referat / Projekt (×1)</option></select></label></div>
+        <input id="gN" placeholder="Notiz, z. B. Thema"><button class="primary">Speichern</button></form>
+    </div>
+    <div class="panel" id="subjList"></div>
+  </section>
+</main>
+<dialog id="cd"><form method="dialog" class="stack" id="cf">
+  <h3 id="cdT">Stunde</h3>
+  <label class="field"><span>Fach (leer = frei)</span><input name="fach" list="subjects"></label>
+  <div class="fields"><label class="field"><span>Raum</span><input name="raum"></label><label class="field"><span>Lehrkraft</span><input name="lehrer"></label></div>
+  <label class="field"><span>Farbe</span><input type="color" name="farbe" value="#5aa9ff"></label>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+</form></dialog>
+<script>
+WB.header('schule');
+const { $, $$, esc, uid, today, Store, toast } = WB;
+const TIMES = [['07:45', '08:30'], ['08:30', '09:15'], ['09:30', '10:15'], ['10:15', '11:00'], ['11:15', '12:00'], ['12:00', '12:45'], ['13:15', '14:00'], ['14:00', '14:45']];
+const DAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr'];
+let D = { plan: {}, colors: {}, grades: [], times: TIMES }, edit = null;
+const save = () => Store.set('schule', D);
+const PAL = ['#5aa9ff', '#a78bfa', '#3ddc97', '#ffbd4a', '#ff5a6e', '#3cc8d8', '#f472b6', '#c4a35a'];
+const colorFor = f => D.colors[f] || (D.colors[f] = PAL[Object.keys(D.colors).length % PAL.length]);
+function renderPlan() {
+  const now = new Date(), td = (now.getDay() + 6) % 7, hm = now.toTimeString().slice(0, 5);
+  let h = '<div></div>' + DAYS.map((d, i) => `<div class="h ${i === td ? 'today' : ''}">${d}</div>`).join('');
+  D.times.forEach(([a, b], s) => { h += `<div class="n">${s + 1}<span style="font-weight:400;font-size:10px">${a}</span></div>`;
+    DAYS.forEach((d, i) => { const c = D.plan[i + '-' + s]; const isNow = i === td && hm >= a && hm < b;
+      h += c && c.fach ? `<button class="cell f ${isNow ? 'now' : ''}" style="--sc:${esc(D.colors[c.fach] || '#5aa9ff')}" data-c="${i}-${s}"><b>${esc(c.fach)}</b><span>${esc([c.raum, c.lehrer].filter(Boolean).join(' · '))}</span></button>` : `<button class="cell ${isNow ? 'now' : ''}" data-c="${i}-${s}"></button>`; }); });
+  $('#plan').innerHTML = h;
+  $('#subjects').innerHTML = subjects().map(s => `<option value="${esc(s)}">`).join('');
+}
+const subjects = () => [...new Set([...Object.values(D.plan).map(c => c.fach).filter(Boolean), ...D.grades.map(g => g.s)])].sort();
+const avg = l => { const w = l.reduce((s, g) => s + g.w, 0); return w ? l.reduce((s, g) => s + g.v * g.w, 0) / w : null; };
+function renderGrades() {
+  const subs = subjects().filter(s => D.grades.some(g => g.s === s));
+  const avgs = subs.map(s => avg(D.grades.filter(g => g.s === s))).filter(x => x != null);
+  const tot = avgs.length ? avgs.reduce((a, b) => a + b, 0) / avgs.length : null;
+  $('#total').textContent = tot ? tot.toFixed(2).replace('.', ',') : '–'; $('#totalS').textContent = tot ? `Durchschnitt aus ${avgs.length} Fächern` : 'noch keine Noten';
+  $('#subjList').innerHTML = subs.length ? subs.map(s => { const l = D.grades.filter(g => g.s === s), a = avg(l);
+    return `<div class="subj"><div class="row between"><b style="display:flex;align-items:center;gap:8px"><span class="dot" style="background:${esc(colorFor(s))}"></span>${esc(s)}</b><span class="avg ${a <= 2.5 ? 'good' : a <= 3.5 ? '' : 'bad'}">${a.toFixed(2).replace('.', ',')}</span></div>
+      <div class="grades">${l.map(g => `<button class="gr g${Math.round(g.v)}" data-g="${g.id}" title="${esc((g.w === 2 ? 'Schulaufgabe' : 'kleiner Leistungsnachweis') + (g.n ? ' · ' + g.n : '') + ' · ' + g.d + ' · Klick zum Bearbeiten')}">${String(g.v).replace('.', ',')}${g.w === 2 ? '²' : ''}</button>`).join('')}</div></div>`; }).join('')
+    : '<div class="empty">Trag deine erste Note ein. Schulaufgaben zählen doppelt.</div>';
+}
+document.addEventListener('click', e => { const c = e.target.closest('[data-c]');
+  if (c) { edit = c.dataset.c; const x = D.plan[edit] || {}; const f = $('#cf'); f.fach.value = x.fach || ''; f.raum.value = x.raum || ''; f.lehrer.value = x.lehrer || ''; f.farbe.value = x.fach ? colorFor(x.fach) : PAL[Object.keys(D.colors).length % PAL.length];
+    const [d, s] = edit.split('-'); $('#cdT').textContent = `${DAYS[d]}, ${+s + 1}. Stunde`; $('#cd').showModal(); }
+  const g = e.target.closest('[data-g]'); if (g) { const x = D.grades.find(y => y.id === g.dataset.g);
+    WB.editForm('Note bearbeiten', [{ k: 's', l: 'Fach', v: x.s, req: true }, { k: 'v', l: 'Note (1–6)', type: 'number', v: x.v }, { k: 'w', l: 'Art', type: 'select', v: x.w, opts: [[2, 'Schulaufgabe (×2)'], [1, 'Ex / mündlich / Referat (×1)']] }, { k: 'n', l: 'Notiz', v: x.n || '' }, { k: 'd', l: 'Datum', type: 'date', v: x.d }], { danger: 'Löschen' })
+      .then(v => { if (v === 'delete') D.grades = D.grades.filter(y => y !== x); else if (v) { if (v.v < 1 || v.v > 6) return toast('Note zwischen 1 und 6'); Object.assign(x, v, { w: +v.w }); } if (v) { save(); renderGrades(); } }); } });
+$('#cd').addEventListener('close', () => { if ($('#cd').returnValue !== 'ok') return; const f = $('#cf');
+  if (!f.fach.value.trim()) delete D.plan[edit]; else { D.plan[edit] = { fach: f.fach.value.trim(), raum: f.raum.value.trim(), lehrer: f.lehrer.value.trim() }; D.colors[f.fach.value.trim()] = f.farbe.value; }
+  save(); renderPlan(); });
+$('#gF').onsubmit = e => { e.preventDefault(); const v = +$('#gV').value; if (v < 1 || v > 6) return toast('Note zwischen 1 und 6');
+  D.grades.push({ id: uid(), s: $('#gS').value.trim(), v, w: +$('#gT').value, n: $('#gN').value.trim(), d: today() }); colorFor($('#gS').value.trim()); $('#gV').value = ''; $('#gN').value = ''; save(); renderGrades(); toast('Gespeichert'); };
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); ['plan', 'noten'].forEach(t => $('#t-' + t).classList.toggle('hide', t !== b.dataset.t)); };
+setInterval(renderPlan, 60000);
+(async () => { D = Object.assign(D, await Store.get('schule', D)); renderPlan(); renderGrades(); })();
+</script>
+</body></html>

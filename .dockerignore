@@ -1,0 +1,8 @@
+data
+status
+host
+*.bat
+*.sh
+*.tgz
+.env
+README.md

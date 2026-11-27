@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Bewerbungs-Kit</title>
+<style>
+  .bw { display: grid; grid-template-columns: minmax(380px, 470px) minmax(0,1fr); gap: 14px; align-items: start; }
+  @media (max-width: 980px) { .bw { grid-template-columns: minmax(0,1fr); } }
+  .paper { background:#fff; color:#1a1a1a; width: 100%; max-width: 794px; aspect-ratio: 210/297; margin: 0 auto; padding: 48px 54px; box-shadow: 0 10px 40px rgba(0,0,0,.25); font: 13px/1.5 "Segoe UI", system-ui, sans-serif; border-radius: 4px; overflow-wrap: anywhere; }
+  @media (max-width: 600px) { .paper { padding: 22px 20px; font-size: 11px; aspect-ratio: auto; } .paper .e { grid-template-columns: 78px 1fr; } }
+  .paper h1 { font: 600 30px/1.1 Bahnschrift, "Segoe UI", sans-serif; color:#111; }
+  .paper .role { color: var(--pc, #e2561f); font-weight: 600; margin-top: 4px; }
+  .paper .contact { color:#555; font-size: 12px; margin-top: 8px; }
+  .paper h4 { font: 700 11px/1 "Cascadia Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--pc, #e2561f); margin: 22px 0 8px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  .paper .e { display:grid; grid-template-columns: 120px 1fr; gap: 12px; margin-bottom: 8px; }
+  .paper .e .w { color:#666; font-size: 12px; }
+  .paper .sub { color:#555; } .paper .pre { white-space: pre-wrap; }
+  .paper .skills { display:flex; flex-wrap:wrap; gap: 6px; } .paper .skills span { border:1px solid #ccc; border-radius: 99px; padding: 2px 9px; font-size: 12px; }
+  .paper.letter { font-size: 13.5px; line-height: 1.6; } .paper.letter p { margin: 0 0 12px; }
+  .ed textarea { min-height: 70px; font-size: 13px; }
+  .card { border: 1px solid var(--line); border-radius: var(--r); background: var(--bg2); padding: 14px; }
+  .card.neu { border-color: var(--acc); box-shadow: 0 0 0 3px var(--glow); }
+  .card-h { display: flex; gap: 6px; align-items: center; margin-bottom: 10px; }
+  .card-h .name { flex: 1; min-width: 0; font: 600 15px var(--f-display); background: transparent; border-color: transparent; padding: 4px 6px; }
+  .card-h .name:hover, .card-h .name:focus { border-color: var(--line2); }
+  .card-h .name::placeholder { color: var(--text); opacity: 1; }
+  .tiles2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 6px; }
+  .tiles2 button { justify-content: flex-start; white-space: normal; text-align: left; font-size: 12.5px; padding: 8px 10px; }
+  .tiles2 button.has { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 10%, var(--bg)); }
+  .item { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px; }
+  .item + .item { margin-top: 8px; }
+  .bar2 { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-bottom: 10px; }
+  .bar2 .grow { min-width: 8px; }
+  .item input, .item select, .item textarea { background: var(--bg2); }
+  .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .grid2 > .wide { grid-column: 1 / -1; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: minmax(0,1fr); } }
+  .dr { display: grid; grid-template-columns: 30px minmax(0,1fr) minmax(0,1fr) 62px; gap: 6px; align-items: center; font-size: 12px; color: var(--mute); }
+  .dr + .dr { margin-top: 6px; } .dr label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+  .fl { font-size: 12px; color: var(--mute); display: block; margin-bottom: 6px; }
+  .xrow { display: flex; gap: 6px; align-items: end; } .xrow > .field { flex: 1; min-width: 0; }
+  .taglist { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .taglist button.chip { color: var(--text); }
+  .sugg { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; } .sugg .used { display: none; }
+  .q { font: 600 24px/1.35 var(--f-display); min-height: 70px; }
+  .timer { font: 700 48px var(--f-mono); }
+  .dr select { padding-left: 6px; padding-right: 2px; }
+  @media (max-width: 480px) { .dr { grid-template-columns: 24px minmax(0,1.35fr) minmax(0,1fr) 56px; gap: 4px; } }
+  /* Vorschau bleibt beim Ausfüllen im Blick */
+  @media (min-width: 981px) { .view { position: sticky; top: 70px; max-height: calc(100vh - 86px); overflow: auto; } }
+  @page { margin: 14mm 15mm; }
+  @media print {
+    body::before, body::after, .page-head, .ed, .toast, #t-iv { display: none !important; }
+    .view { position: static !important; max-height: none !important; overflow: visible !important; } .view > * { margin-top: 0 !important; }
+    main.wrap { max-width: none; margin: 0; padding: 0; } .bw { display: block; } .bw.hide { display: none !important; }
+    .paper { box-shadow: none; max-width: none; aspect-ratio: auto; padding: 0; border-radius: 0; }
+    .paper .e, .paper p { break-inside: avoid; } .paper h4 { break-after: avoid; }
+    .paper .e { grid-template-columns: 120px 1fr; }
+  }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">12 · Werkzeug</div><h1>Bewerbungs-Kit</h1><p>Lebenslauf und Anschreiben zusammenklicken, mit Live-Vorschau und als PDF druckbar. Dazu ein Interview-Training mit typischen Fragen.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="cv">Lebenslauf</button><button data-t="cl">Anschreiben</button><button data-t="iv">Interview</button></div>
+  </div>
+
+  <section id="t-cv" class="bw">
+    <div class="stack ed" id="cvEd"></div>
+    <div class="stack view"><div class="row end no-print"><span class="mute" style="font-size:12px" id="cvPages"></span><span class="mute" style="font-size:12px">Im Druckdialog „Als PDF speichern“ wählen</span><button class="primary" data-print>Drucken / PDF</button></div><div class="paper" id="cvP"></div></div>
+  </section>
+  <section id="t-cl" class="hide bw">
+    <div class="stack ed" id="clEd"></div>
+    <div class="stack view"><div class="row end no-print"><span class="mute" style="font-size:12px" id="clPages"></span><button class="primary" data-print>Drucken / PDF</button></div><div class="paper letter" id="clP"></div></div>
+  </section>
+  <section id="t-iv" class="hide side">
+    <div class="panel stack">
+      <div class="label">Kategorie</div>
+      <div class="row" id="cats"></div>
+      <hr><div class="label">So antwortest du gut: STAR</div>
+      <p class="mute" style="font-size:13px"><b style="color:var(--text)">S</b>ituation: Wo warst du? <b style="color:var(--text)">T</b>ask: Was war die Aufgabe? <b style="color:var(--text)">A</b>ction: Was hast <i>du</i> gemacht? <b style="color:var(--text)">R</b>esult: Was kam dabei raus, und was hast du gelernt?</p>
+    </div>
+    <div class="panel stack">
+      <div class="row between"><span class="label" id="qMeta"></span><span class="timer" id="timer">1:30</span></div>
+      <div class="q" id="q"></div>
+      <textarea id="ans" placeholder="Stichpunkte zu deiner Antwort … (werden pro Frage gespeichert)" style="min-height:140px"></textarea>
+      <div class="row"><button id="tStart">Timer starten</button><span class="grow"></span><button class="primary" id="qNext">Nächste Frage →</button></div>
+    </div>
+  </section>
+</main>
+<script>
+WB.header('bewerbung');
+const { $, $$, esc, api, uid, Store, toast } = WB;
+
+// ---------- Bausteine ----------
+const F = (k, l, on = false, t = 'text', ph = '') => ({ k, l, on, t, ph });
+const RANGE = on => F('datum', 'Zeitraum', on, 'range'), ONE = on => F('am', 'Datum', on, 'month');
+const AREA = (l, on = false, ph = '') => F('text', l, on, 'area', ph);
+const TYPES = {
+  profil:       { t: 'Kurzprofil', kind: 'text', ph: 'Zwei bis drei Sätze: Wer bist du, was kannst du, was suchst du?' },
+  beruf:        { t: 'Berufserfahrung', fields: [RANGE(true), F('titel', 'Position', true, 'text', 'z. B. Werkstudent Entwicklung'), F('org', 'Firma', true), F('ort', 'Ort'), F('tech', 'Technologien'), AREA('Aufgaben')] },
+  ausbildung:   { t: 'Ausbildung', fields: [RANGE(true), F('titel', 'Ausbildungsberuf', true, 'text', 'z. B. Fachinformatiker für Anwendungsentwicklung'), F('org', 'Ausbildungsbetrieb', true), F('schule', 'Berufsschule'), F('ort', 'Ort'), F('fach', 'Schwerpunkte'), F('note', 'Note'), AREA('Inhalte')] },
+  praktikum:    { t: 'Praktikum', fields: [RANGE(true), F('titel', 'Bereich', true, 'text', 'z. B. IT-Support'), F('org', 'Firma', true), F('ort', 'Ort'), AREA('Aufgaben')] },
+  bildung:      { t: 'Bildung', fields: [RANGE(true), F('titel', 'Abschluss', true, 'text', 'z. B. Mittlere Reife'), F('org', 'Schule', true), F('ort', 'Ort'), F('note', 'Notenschnitt'), F('fach', 'Schwerpunkte'), AREA('Beschreibung')] },
+  studium:      { t: 'Studium', fields: [RANGE(true), F('titel', 'Studiengang', true), F('org', 'Hochschule', true), F('abschluss', 'Abschluss'), F('ort', 'Ort'), F('note', 'Note'), F('fach', 'Schwerpunkte'), AREA('Beschreibung')] },
+  zertifikat:   { t: 'Weiterbildung & Zertifikate', fields: [ONE(true), F('titel', 'Zertifikat / Kurs', true), F('org', 'Anbieter', true), F('ort', 'Ort'), F('note', 'Ergebnis'), F('link', 'Link'), AREA('Inhalt')] },
+  projekt:      { t: 'Projekte', fields: [RANGE(true), F('titel', 'Projektname', true), F('org', 'Für wen'), F('tech', 'Technologien'), F('link', 'Link'), AREA('Beschreibung', true)] },
+  ehrenamt:     { t: 'Ehrenamt', fields: [RANGE(true), F('titel', 'Aufgabe', true), F('org', 'Verein / Organisation', true), F('ort', 'Ort'), AREA('Beschreibung')] },
+  preis:        { t: 'Auszeichnungen', fields: [ONE(true), F('titel', 'Auszeichnung', true), F('org', 'Verliehen von'), AREA('Beschreibung')] },
+  referenz:     { t: 'Referenzen', fields: [F('titel', 'Name', true), F('rolle', 'Funktion', true), F('org', 'Firma', true), F('kontakt', 'E-Mail / Telefon'), AREA('Hinweis')] },
+  skills:       { t: 'Skills', kind: 'tags', sugg: ['Java', 'C#', 'Python', 'JavaScript', 'TypeScript', 'HTML/CSS', 'SQL', 'Git', 'Docker', 'Linux', 'Netzwerke', 'Spring', '.NET', 'Scrum', 'MS Office', 'Teamfähigkeit', 'Zuverlässigkeit', 'Selbstständigkeit'] },
+  sprachen:     { t: 'Sprachen', fields: [F('sprache', 'Sprache', true, 'text', 'z. B. Englisch'), F('niveau', 'Niveau', true, 'text', 'z. B. B2'), F('nachweis', 'Nachweis')] },
+  fuehrerschein:{ t: 'Führerschein', kind: 'tags', sugg: ['Klasse B', 'BF17', 'BE', 'AM', 'A1', 'A2', 'A', 'L', 'T'] },
+  hobby:        { t: 'Interessen', kind: 'tags', sugg: ['Programmieren', 'Homelab', 'Spieleentwicklung', 'Technik', 'Sport', 'Musik', 'Lesen', 'Reisen', 'Kochen', 'Fotografie'] },
+  eigen:        { t: 'Eigener Bereich', fields: [RANGE(false), F('titel', 'Titel', true), F('org', 'Organisation'), F('ort', 'Ort'), AREA('Text', true)] }
+};
+const ORDER = Object.keys(TYPES);
+const LISTS = { sprache: ['Deutsch', 'Englisch', 'Französisch', 'Spanisch', 'Italienisch', 'Russisch', 'Türkisch', 'Polnisch'], niveau: ['Muttersprache', 'C2', 'C1', 'B2', 'B1', 'A2', 'A1', 'fließend', 'gut', 'Grundkenntnisse'] };
+// Zusätzliche persönliche Angaben
+const EXTRA = [F('geburtsdatum', 'Geburtsdatum', false, 'date'), F('geburtsort', 'Geburtsort'), F('strasse', 'Straße & Hausnummer'), F('nation', 'Staatsangehörigkeit'), F('familie', 'Familienstand'), F('web', 'Website'), F('github', 'GitHub'), F('linkedin', 'LinkedIn / Xing'), F('verfuegbar', 'Verfügbar ab', false, 'date')];
+// Zusätzliche Teile im Anschreiben
+const CLX = [F('datum', 'Briefdatum', false, 'date'), F('ref', 'Referenznummer'), F('betreff', 'Eigener Betreff'), F('gehalt', 'Gehaltsvorstellung', false, 'text', 'z. B. 1.200 € brutto im Monat'), F('frist', 'Kündigungsfrist', false, 'text', 'z. B. 4 Wochen'),
+  F('absatz', 'Zusätzlicher Absatz', false, 'area'), F('anlagen', 'Anlagen', false, 'text', 'Lebenslauf, Zeugnisse'), F('ps', 'PS', false, 'text')];
+
+// ---------- Datum ----------
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+const YEARS = Array.from({ length: new Date().getFullYear() + 8 - 1959 }, (_, i) => String(new Date().getFullYear() + 8 - i));
+const my = (m, j) => j ? (m ? String(m).padStart(2, '0') + '/' + j : String(j)) : '';
+function dateText(v) {
+  if (!v) return ''; if (typeof v === 'string') return v;
+  if ('j' in v || 'm' in v) return my(v.m, v.j);
+  const a = my(v.vm, v.vj), b = v.heute ? '' : my(v.bm, v.bj);
+  if (v.heute) return a ? 'seit ' + a : 'bis heute';
+  return a && b ? (a === b ? a : a + ' – ' + b) : a || b;
+}
+const deDate = s => /^\d{4}-\d\d-\d\d$/.test(s || '') ? s.split('-').reverse().join('.') : s || '';
+// Alte Texteingaben („seit 09/2026“, „2024 – 2026“) in die Auswahl übernehmen, sonst als Freitext behalten
+function parseWhen(s) {
+  let m; const ok = x => !x || (+x >= 1 && +x <= 12), n = x => x ? String(+x) : '', y = x => YEARS.includes(x);
+  if ((m = s.match(/^seit\s+(?:(\d{1,2})[\/.])?(\d{4})$/i)) && ok(m[1]) && y(m[2])) return { vm: n(m[1]), vj: m[2], bm: '', bj: '', heute: true };
+  if ((m = s.match(/^(?:(\d{1,2})[\/.])?(\d{4})\s*(?:–|-|bis)\s*(?:(?:(\d{1,2})[\/.])?(\d{4})|(heute))$/i)) && ok(m[1]) && ok(m[3]) && y(m[2]) && (m[5] || y(m[4]))) return { vm: n(m[1]), vj: m[2], bm: n(m[3]), bj: m[4] || '', heute: !!m[5] };
+  if ((m = s.match(/^(?:(\d{1,2})[\/.])?(\d{4})$/)) && ok(m[1]) && y(m[2])) return { vm: '', vj: '', bm: n(m[1]), bj: m[2], heute: false };
+  return s;
+}
+
+// ---------- Daten ----------
+const newItem = type => ({ on: TYPES[type].fields.filter(f => f.on).map(f => f.k), f: {} });
+function newSection(type) { const T = TYPES[type]; return { id: uid(), type, title: '', ...(T.kind === 'text' ? { text: '' } : T.kind === 'tags' ? { tags: [] } : { items: [newItem(type)] }) }; }
+const emptyLetter = () => ({ company: '', anrede: 'allg', contact: '', street: '', zip: '', job: '', source: 'auf Ihrer Website', why: '', me: '', plus: '', start: { art: 'absprache', datum: '', frei: '' }, on: [], x: {} });
+const fresh = name => ({ v: 2, cv: { name, role: '', mail: '', phone: '', city: '', color: '#e2561f', on: [], x: {}, sections: ['profil', 'ausbildung', 'bildung', 'skills', 'sprachen', 'hobby'].map(newSection) }, cl: emptyLetter(), notes: {} });
+// Kommas trennen, aber nicht innerhalb von Klammern
+const splitList = s => String(s || '').split(/,(?![^()]*\))/).map(x => x.trim()).filter(Boolean);
+function migrate(old, name) {
+  const D = fresh(name), c = old.cv || {}, l = old.cl || {}; D.notes = old.notes || {}; D.alt = { cv: c, cl: l }; // Original aufheben
+  for (const k of ['name', 'role', 'mail', 'phone', 'city', 'color']) if (c[k] !== undefined) D.cv[k] = c[k];
+  const S = D.cv.sections = [];
+  if (c.profile) S.push({ ...newSection('profil'), text: c.profile });
+  for (const [key, type] of [['exp', 'beruf'], ['edu', 'bildung']]) {
+    const items = String(c[key] || '').split('\n').filter(x => x.trim()).map(line => { const p = line.split('|').map(x => x.trim()), it = { on: [], f: {} };
+      const [w, t, d] = p.length > 1 ? [p[0], p[1], p.slice(2).join(' | ')] : ['', p[0], ''];
+      for (const [k, v] of [['datum', w && parseWhen(w)], ['titel', t], ['text', d]]) { if (v) it.f[k] = v; if (v || k !== 'text') it.on.push(k); }
+      return it; });
+    if (items.length) S.push({ ...newSection(type), items });
+  }
+  if (splitList(c.skills).length) S.push({ ...newSection('skills'), tags: splitList(c.skills) });
+  const langs = splitList(c.lang).map(x => { const m = x.match(/^(.*?)\s*\((.*)\)$/); return { on: ['sprache', 'niveau'], f: m ? { sprache: m[1], niveau: m[2] } : { sprache: x } }; });
+  if (langs.length) S.push({ ...newSection('sprachen'), items: langs });
+  if (splitList(c.hobby).length) S.push({ ...newSection('hobby'), tags: splitList(c.hobby) });
+  for (const k of ['company', 'street', 'zip', 'job', 'source', 'why', 'me', 'plus']) if (l[k] !== undefined) D.cl[k] = l[k];
+  const a = String(l.contact || '').match(/^(frau|herrn?)\s+(.+)$/i);
+  D.cl.anrede = a ? (/^frau/i.test(a[1]) ? 'frau' : 'herr') : 'allg'; D.cl.contact = a ? a[2] : l.contact || '';
+  const st = String(l.start || '').trim(), dm = st.match(/^(?:ab\s+(?:dem\s+)?)?(\d{1,2})\.(\d{1,2})\.(\d{4})$/i);
+  D.cl.start = dm ? { art: 'datum', datum: `${dm[3]}-${dm[2].padStart(2, '0')}-${dm[1].padStart(2, '0')}`, frei: '' } : /^(nach absprache)?$/i.test(st) ? { art: 'absprache', datum: '', frei: '' } : /^(ab )?sofort$/i.test(st) ? { art: 'sofort', datum: '', frei: '' } : { art: 'frei', datum: '', frei: st };
+  return D;
+}
+let D = null;
+const save = () => Store.set('bewerbung', D);
+const sec = id => D.cv.sections.find(s => s.id === id);
+const hasContent = it => it.on.some(k => dateText(it.f[k]).trim?.());
+
+// ---------- Editor ----------
+const opt = (list, v, empty) => `<option value="">${empty}</option>` + list.map(([val, text]) => `<option value="${val}" ${String(v || '') === String(val) ? 'selected' : ''}>${text}</option>`).join('');
+const monthSel = (d, v, label) => `<select data-d="${d}" aria-label="${label} Monat">${opt(MONTHS.map((m, i) => [i + 1, m]), v, 'Monat')}</select>`;
+const yearSel = (d, v, label) => `<select data-d="${d}" aria-label="${label} Jahr">${opt(YEARS.map(y => [y, y]), v, 'Jahr')}</select>`;
+function control(fd, v) {
+  if ((fd.t === 'range' || fd.t === 'month') && typeof v === 'string' && v) return `<div class="wide"><span class="fl">${fd.l} (Freitext)</span><div class="row" style="flex-wrap:nowrap"><input data-f="${fd.k}" value="${esc(v)}"><button type="button" class="sm" data-act="pick" data-key="${fd.k}">Auswählen</button></div></div>`;
+  v = v || {};
+  if (fd.t === 'range') return `<div class="wide" data-date="${fd.k}"><span class="fl">${fd.l}</span>
+    <div class="dr"><span>von</span>${monthSel('vm', v.vm, 'Von')}${yearSel('vj', v.vj, 'Von')}<span></span></div>
+    <div class="dr"><span>bis</span>${monthSel('bm', v.bm, 'Bis')}${yearSel('bj', v.bj, 'Bis')}<label><input type="checkbox" data-d="heute" ${v.heute ? 'checked' : ''}>heute</label></div></div>`;
+  if (fd.t === 'month') return `<div class="wide" data-date="${fd.k}"><span class="fl">${fd.l}</span><div class="dr"><span>am</span>${monthSel('m', v.m, 'Datum')}${yearSel('j', v.j, 'Datum')}<span></span></div></div>`;
+  const val = typeof v === 'string' ? v : '';
+  if (fd.t === 'area') return `<label class="field wide"><span>${fd.l}</span><textarea data-f="${fd.k}" placeholder="${esc(fd.ph)}">${esc(val)}</textarea></label>`;
+  return `<label class="field"><span>${fd.l}</span><input type="${fd.t}" data-f="${fd.k}" value="${esc(val)}" placeholder="${esc(fd.ph)}" ${LISTS[fd.k] ? `list="dl-${fd.k}"` : ''}></label>`;
+}
+const toggles = (fields, on, attr) => fields.map(f => `<button type="button" class="chip ${on.includes(f.k) ? 'on' : ''}" ${attr}="${f.k}" aria-pressed="${on.includes(f.k)}">${on.includes(f.k) ? '✓' : '+'} ${f.l}</button>`).join('');
+function sectionHtml(s, i) {
+  const T = TYPES[s.type]; let body;
+  if (T.kind === 'text') body = `<textarea data-text style="min-height:100px" placeholder="${esc(T.ph)}">${esc(s.text)}</textarea>`;
+  else if (T.kind === 'tags') body = `<div class="taglist">${tagHtml(s)}</div><input data-tagin placeholder="Eigenen Eintrag tippen und Enter drücken" enterkeyhint="done">
+    <div class="sugg">${T.sugg.map(x => `<button type="button" class="chip ${s.tags.includes(x) ? 'used' : ''}" data-act="sugg" data-val="${esc(x)}">+ ${esc(x)}</button>`).join('')}</div>`;
+  else body = s.items.map((it, n) => `<div class="item" data-it="${n}"><div class="bar2">${toggles(T.fields, it.on, 'data-tog')}<span class="grow"></span>
+      ${s.items.length > 1 ? `<button type="button" class="ghost sm" data-act="itup" title="Eintrag nach oben" ${n ? '' : 'disabled'}>↑</button>` : ''}<button type="button" class="ghost sm danger" data-act="delitem" title="Eintrag löschen">✕</button></div>
+      <div class="grid2">${T.fields.filter(f => it.on.includes(f.k)).map(f => control(f, it.f[f.k])).join('') || '<span class="faint" style="font-size:12px">Wähl oben aus, was du angeben willst.</span>'}</div></div>`).join('')
+    + `<button type="button" class="sm" data-act="additem" style="margin-top:8px">+ Weiterer Eintrag</button>`;
+  return `<div class="card" data-sec="${s.id}"><div class="card-h"><input class="name" data-title value="${esc(s.title)}" placeholder="${T.t}" aria-label="Überschrift">
+    <button type="button" class="ghost sm" data-act="up" title="Bereich nach oben" ${i ? '' : 'disabled'}>↑</button><button type="button" class="ghost sm" data-act="down" title="Bereich nach unten" ${i < D.cv.sections.length - 1 ? '' : 'disabled'}>↓</button><button type="button" class="ghost sm danger" data-act="delsec" title="Bereich entfernen">✕</button></div>${body}</div>`;
+}
+const tagHtml = s => s.tags.map((t, n) => `<button type="button" class="chip" data-act="deltag" data-n="${n}" title="Entfernen">${esc(t)} ✕</button>`).join('');
+const extraHtml = (fields, obj) => fields.filter(f => obj.on.includes(f.k)).map(f => control(f, obj.x[f.k]).replace(/data-f=/g, 'data-x=')).join('');
+function drawCvEd() {
+  const c = D.cv, base = (k, l, t = 'text', ph = '') => `<label class="field"><span>${l}</span><input type="${t}" data-k="${k}" value="${esc(c[k])}" placeholder="${ph}"></label>`;
+  $('#cvEd').innerHTML = `<div class="card"><div class="card-h"><span class="label">Persönliche Daten</span></div>
+      <div class="grid2">${base('name', 'Name')}${base('role', 'Titel / Gesuchte Stelle')}${base('mail', 'E-Mail', 'email')}${base('phone', 'Telefon', 'tel')}${base('city', 'PLZ & Ort')}${base('color', 'Akzentfarbe', 'color')}</div>
+      <div class="bar2" style="margin:12px 0 0">${toggles(EXTRA, c.on, 'data-xtog')}</div>${c.on.length ? `<div class="grid2" style="margin-top:10px">${extraHtml(EXTRA, c)}</div>` : ''}</div>
+    <div class="card"><div class="card-h"><span class="label">Bereich hinzufügen</span></div><div class="tiles2">${ORDER.map(t => { const n = c.sections.filter(s => s.type === t).length;
+      return `<button type="button" class="${n ? 'has' : ''}" data-add="${t}">${n ? '✓' : '+'} ${TYPES[t].t}</button>`; }).join('')}</div>
+      <p class="faint" style="font-size:12px;margin-top:8px">Ein Klick legt den Bereich an. Ist er schon da, kommt ein weiterer Eintrag dazu.</p></div>
+    ${c.sections.map(sectionHtml).join('')}`;
+}
+function drawClEd() {
+  const l = D.cl, inp = (k, label, ph = '', extra = '') => `<label class="field"><span>${label}</span><input data-k="${k}" value="${esc(l[k])}" placeholder="${ph}" ${extra}></label>`;
+  const area = (k, label, ph) => `<label class="field wide"><span>${label}</span><textarea data-k="${k}" placeholder="${ph}">${esc(l[k])}</textarea></label>`;
+  $('#clEd').innerHTML = `<div class="card"><div class="card-h"><span class="label">Empfänger</span></div><div class="grid2">${inp('company', 'Firma', 'Firma GmbH')}
+      <label class="field"><span>Anrede</span><select data-k="anrede"><option value="allg">Damen und Herren</option><option value="frau">Frau</option><option value="herr">Herr</option></select></label>
+      ${inp('contact', 'Nachname Ansprechperson')}${inp('street', 'Straße')}${inp('zip', 'PLZ & Ort')}</div></div>
+    <div class="card"><div class="card-h"><span class="label">Stelle & Start</span></div><div class="grid2">${inp('job', 'Stelle', 'z. B. Junior Softwareentwickler (m/w/d)')}
+      ${inp('source', 'Gefunden …', '', 'list="dl-source"')}
+      <label class="field"><span>Eintritt</span><select data-start="art"><option value="absprache">nach Absprache</option><option value="sofort">ab sofort</option><option value="datum">ab Datum …</option><option value="frei">eigener Text …</option></select></label>
+      ${l.start.art === 'datum' ? `<label class="field"><span>Startdatum</span><input type="date" data-start="datum" value="${esc(l.start.datum)}"></label>` : l.start.art === 'frei' ? `<label class="field"><span>Ich kann … starten</span><input data-start="frei" value="${esc(l.start.frei)}"></label>` : ''}</div></div>
+    <div class="card"><div class="card-h"><span class="label">Text</span></div><div class="grid2">${area('why', 'Warum diese Firma?', 'Was reizt dich an genau dieser Firma?')}${area('me', 'Was bringst du mit?', 'Erfahrungen und Projekte, die zur Stelle passen')}${area('plus', 'Was macht dich aus?', 'z. B. Ich lerne schnell und bringe Projekte zu Ende.')}</div></div>
+    <div class="card"><div class="card-h"><span class="label">Hinzufügen</span></div><div class="bar2" style="margin:0">${toggles(CLX, l.on, 'data-xtog')}</div>${l.on.length ? `<div class="grid2" style="margin-top:10px">${extraHtml(CLX, l)}</div>` : ''}</div>`;
+  $('#clEd [data-k="anrede"]').value = l.anrede; $('#clEd [data-start="art"]').value = l.start.art;
+}
+
+// ---------- Vorschau ----------
+function entryHtml(s, it) {
+  const v = k => it.on.includes(k) ? dateText(it.f[k]).trim() : '';
+  if (s.type === 'sprachen') return v('sprache') || v('niveau') ? `<div class="e"><div class="w">${esc(v('sprache'))}</div><div>${esc([v('niveau'), v('nachweis')].filter(Boolean).join(' · '))}</div></div>` : '';
+  const sub = [v('rolle'), v('org'), v('ort')].filter(Boolean).join(', ');
+  const lines = [['schule', 'Berufsschule'], ['abschluss', 'Abschluss'], ['note', s.type === 'zertifikat' ? 'Ergebnis' : 'Note'], ['fach', 'Schwerpunkte'], ['tech', 'Technologien'], ['link', ''], ['kontakt', '']]
+    .filter(([k]) => v(k)).map(([k, l]) => `<div class="sub">${l ? l + ': ' : ''}${esc(v(k))}</div>`).join('');
+  const when = v('datum') || v('am'), body = `${v('titel') ? `<b>${esc(v('titel'))}</b>` : ''}${sub ? `<div class="sub">${esc(sub)}</div>` : ''}${lines}${v('text') ? `<div class="sub pre">${esc(v('text'))}</div>` : ''}`;
+  return when || body ? `<div class="e"><div class="w">${esc(when)}</div><div>${body}</div></div>` : '';
+}
+function pages(id) { const p = $('#' + id + 'P'); if (!p.offsetWidth) return; const n = Math.ceil((p.scrollHeight - 4) / (p.offsetWidth * 297 / 210)); $('#' + id + 'Pages').textContent = n > 1 && p.offsetWidth > 560 ? `Etwa ${n} Seiten` : ''; }
+function cv() {
+  const c = D.cv, x = k => c.on.includes(k) ? String(c.x[k] || '').trim() : '';
+  const born = x('geburtsdatum') ? `geb. ${deDate(x('geburtsdatum'))}${x('geburtsort') ? ' in ' + x('geburtsort') : ''}` : x('geburtsort') ? 'Geburtsort: ' + x('geburtsort') : '';
+  const contact = [c.mail, c.phone, [x('strasse'), c.city].filter(Boolean).join(', ')].filter(Boolean);
+  const more = [born, x('nation') && 'Staatsangehörigkeit: ' + x('nation'), x('familie') && 'Familienstand: ' + x('familie'), x('web'), x('github'), x('linkedin'), x('verfuegbar') && 'Verfügbar ab ' + deDate(x('verfuegbar'))].filter(Boolean);
+  const line = l => l.length ? `<div class="contact">${l.map(esc).join('  ·  ')}</div>` : '';
+  $('#cvP').style.setProperty('--pc', c.color);
+  $('#cvP').innerHTML = `<h1>${esc(c.name)}</h1><div class="role">${esc(c.role)}</div>${line(contact)}${line(more)}` + c.sections.map(s => {
+    const T = TYPES[s.type]; let body;
+    if (T.kind === 'text') body = s.text.trim() ? `<p class="pre">${esc(s.text.trim())}</p>` : '';
+    else if (T.kind === 'tags') body = s.tags.length ? `<div class="skills">${s.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : '';
+    else body = s.items.map(it => entryHtml(s, it)).join('');
+    return body ? `<h4>${esc(s.title || T.t)}</h4>${body}` : ''; }).join('');
+  pages('cv');
+}
+function cl() {
+  const l = D.cl, c = D.cv, x = k => l.on.includes(k) ? String(l.x[k] || '').trim() : '', name = l.contact.trim();
+  const anrede = l.anrede === 'frau' && name ? `Sehr geehrte Frau ${name},` : l.anrede === 'herr' && name ? `Sehr geehrter Herr ${name},` : 'Sehr geehrte Damen und Herren,';
+  const person = name ? (l.anrede === 'frau' ? 'Frau ' : l.anrede === 'herr' ? 'Herrn ' : '') + name : '';
+  const start = { absprache: 'nach Absprache', sofort: 'ab sofort', datum: l.start.datum ? 'ab dem ' + deDate(l.start.datum) : 'nach Absprache', frei: l.start.frei.trim() || 'nach Absprache' }[l.start.art];
+  const subject = x('betreff') || `Bewerbung als ${l.job}`, p = t => t.trim() ? `<p class="pre">${esc(t.trim())}</p>` : '';
+  const when = x('datum') ? deDate(x('datum')) : new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const extras = [x('gehalt') && `Meine Gehaltsvorstellung liegt bei ${x('gehalt')}.`, x('frist') && `Meine Kündigungsfrist beträgt ${x('frist')}.`].filter(Boolean).join(' ');
+  $('#clP').style.setProperty('--pc', c.color);
+  $('#clP').innerHTML = `<div style="color:#666;font-size:12px">${[c.name, c.on.includes('strasse') ? c.x.strasse : '', c.city, c.mail, c.phone].filter(Boolean).map(esc).join(' · ')}</div>
+  <div style="margin:28px 0">${[l.company, person, l.street, l.zip].filter(Boolean).map(esc).join('<br>')}</div>
+  <div style="text-align:right;color:#666">${c.city ? esc(c.city.replace(/^\d{5}\s+/, '')) + ', ' : ''}${esc(when)}</div>
+  <p style="font-weight:700;margin-top:18px;color:var(--pc)">${esc(subject)}${x('ref') ? `<br><span style="font-weight:400">Referenznummer: ${esc(x('ref'))}</span>` : ''}</p><p>${esc(anrede)}</p>
+  <p>mit großem Interesse habe ich Ihre Ausschreibung ${esc(l.source)} gelesen. ${esc(l.why)}</p>${p(l.me)}${p(l.plus)}${p(x('absatz'))}
+  <p>${extras ? esc(extras) + ' ' : ''}Ich kann ${esc(start)} bei Ihnen starten und freue mich auf ein persönliches Gespräch.</p><p>Mit freundlichen Grüßen<br><br>${esc(c.name)}</p>
+  ${x('ps') ? `<p>PS: ${esc(x('ps'))}</p>` : ''}${x('anlagen') ? `<p style="color:#666;font-size:12px">Anlagen: ${esc(x('anlagen'))}</p>` : ''}`;
+  pages('cl');
+}
+
+// ---------- Bedienung Lebenslauf ----------
+const redraw = () => { save(); drawCvEd(); cv(); };
+function show(id, focus = true) { const el = $(`#cvEd [data-sec="${id}"]`); if (!el) return; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); el.classList.add('neu'); setTimeout(() => el.classList.remove('neu'), 1600);
+  if (focus) { const items = el.querySelectorAll('.item'); (items.length ? items[items.length - 1] : el).querySelector('.grid2 input, .grid2 select, textarea, [data-tagin]')?.focus({ preventScroll: true }); } }
+function addSection(type) {
+  const S = D.cv.sections; let s = type !== 'eigen' && S.find(x => x.type === type);
+  if (s) { if (s.items) s.items.push(newItem(type)); }
+  else { s = newSection(type); const at = S.findIndex(x => ORDER.indexOf(x.type) > ORDER.indexOf(type)); S.splice(at < 0 ? S.length : at, 0, s); }
+  redraw(); show(s.id);
+}
+function addTag(card, s, value) {
+  const t = value.trim().slice(0, 80); if (t && !s.tags.includes(t)) { s.tags.push(t); save(); cv(); }
+  card.querySelector('.taglist').innerHTML = tagHtml(s);
+  card.querySelectorAll('[data-act="sugg"]').forEach(b => b.classList.toggle('used', s.tags.includes(b.dataset.val)));
+}
+const toggle = (list, k) => list.includes(k) ? list.splice(list.indexOf(k), 1) : list.push(k);
+$('#cvEd').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
+  if (d.add) return addSection(d.add);
+  if (d.xtog) { toggle(D.cv.on, d.xtog); return redraw(); }
+  const card = b.closest('[data-sec]'); if (!card) return; const s = sec(card.dataset.sec), i = D.cv.sections.indexOf(s);
+  const row = b.closest('[data-it]'), n = row ? +row.dataset.it : -1;
+  if (d.tog) { toggle(s.items[n].on, d.tog); return redraw(); }
+  if (d.act === 'up' || d.act === 'down') { const j = i + (d.act === 'up' ? -1 : 1); [D.cv.sections[i], D.cv.sections[j]] = [D.cv.sections[j], D.cv.sections[i]]; redraw(); return; }
+  if (d.act === 'delsec') { const filled = s.text?.trim() || s.tags?.length || s.items?.some(hasContent); if (filled && !confirm(`Bereich „${s.title || TYPES[s.type].t}“ mit allen Einträgen entfernen?`)) return; D.cv.sections.splice(i, 1); return redraw(); }
+  if (d.act === 'additem') { s.items.push(newItem(s.type)); redraw(); return show(s.id); }
+  if (d.act === 'itup') { [s.items[n - 1], s.items[n]] = [s.items[n], s.items[n - 1]]; return redraw(); }
+  if (d.act === 'delitem') { if (hasContent(s.items[n]) && !confirm('Diesen Eintrag löschen?')) return; s.items.splice(n, 1); if (!s.items.length) D.cv.sections.splice(i, 1); return redraw(); }
+  if (d.act === 'pick') { delete s.items[n].f[d.key]; return redraw(); }
+  if (d.act === 'sugg') return addTag(card, s, d.val);
+  if (d.act === 'deltag') { s.tags.splice(+d.n, 1); save(); cv(); return addTag(card, s, ''); }
+});
+function cvInput(e) {
+  const t = e.target, d = t.dataset;
+  if (d.k) { D.cv[d.k] = t.value; save(); cv(); return cl(); }
+  if (d.x) { D.cv.x[d.x] = t.value; save(); cv(); return cl(); }
+  const card = t.closest('[data-sec]'); if (!card) return; const s = sec(card.dataset.sec);
+  if ('title' in d) s.title = t.value; else if ('text' in d) s.text = t.value;
+  else if ('tagin' in d) return;
+  else { const it = s.items[+t.closest('[data-it]').dataset.it];
+    if (d.f) it.f[d.f] = t.value;
+    else if (d.d) { const k = t.closest('[data-date]').dataset.date, v = typeof it.f[k] === 'object' ? it.f[k] : (it.f[k] = {}); v[d.d] = d.d === 'heute' ? t.checked : t.value;
+      if (d.d === 'heute' && t.checked) { v.bm = v.bj = ''; t.closest('.dr').querySelectorAll('select').forEach(x => x.value = ''); }
+      if ((d.d === 'bm' || d.d === 'bj') && t.value) { v.heute = false; const h = t.closest('.dr').querySelector('[data-d="heute"]'); if (h) h.checked = false; } } }
+  save(); cv();
+}
+$('#cvEd').addEventListener('input', cvInput);
+// Tags: Enter oder Verlassen des Feldes übernimmt den Text
+function takeTag(t) { if (!t.value.trim()) return; const card = t.closest('[data-sec]'); addTag(card, sec(card.dataset.sec), t.value); t.value = ''; }
+$('#cvEd').addEventListener('keydown', e => { if (e.key === 'Enter' && 'tagin' in e.target.dataset) { e.preventDefault(); takeTag(e.target); } });
+$('#cvEd').addEventListener('change', e => { if ('tagin' in e.target.dataset) takeTag(e.target); });
+
+// ---------- Bedienung Anschreiben ----------
+$('#clEd').addEventListener('click', e => { const b = e.target.closest('[data-xtog]'); if (!b) return; toggle(D.cl.on, b.dataset.xtog); save(); drawClEd(); cl(); });
+$('#clEd').addEventListener('input', e => { const t = e.target, d = t.dataset;
+  if (d.k) D.cl[d.k] = t.value; else if (d.x) D.cl.x[d.x] = t.value; else if (d.start) { D.cl.start[d.start] = t.value; if (d.start === 'art') { drawClEd(); $('#clEd [data-start="art"]').focus(); } } else return;
+  save(); cl(); });
+
+// ---------- Interview ----------
+const QS = {
+  'Einstieg': ['Erzählen Sie etwas über sich.', 'Warum möchten Sie gerade bei uns arbeiten?', 'Wie sind Sie auf unser Unternehmen aufmerksam geworden?', 'Wo sehen Sie sich in fünf Jahren?', 'Warum sollten wir uns für Sie entscheiden?'],
+  'Stärken & Schwächen': ['Was ist Ihre größte Stärke?', 'Nennen Sie eine Schwäche und wie Sie damit umgehen.', 'Wie würden Ihre Kollegen Sie beschreiben?', 'Was motiviert Sie?'],
+  'Situationen': ['Erzählen Sie von einem Fehler, den Sie gemacht haben, und was Sie daraus gelernt haben.', 'Beschreiben Sie einen Konflikt im Team und wie er gelöst wurde.', 'Wie gehen Sie vor, wenn Sie bei einer Aufgabe nicht weiterkommen?', 'Erzählen Sie von einem Projekt, auf das Sie stolz sind.', 'Wie gehen Sie mit Zeitdruck um?'],
+  'IT / Entwicklung': ['Was ist der Unterschied zwischen einer Klasse und einem Objekt?', 'Erklären Sie Vererbung und Polymorphie mit einem Beispiel.', 'Was ist der Unterschied zwischen einem Interface und einer abstrakten Klasse?', 'Wie funktioniert Git, und was ist ein Merge-Konflikt?', 'Was ist eine REST-API?', 'Was ist Docker, und welches Problem löst es?', 'Wie würden Sie einen Bug finden, der nur manchmal auftritt?', 'Was bedeutet Clean Code für Sie?', 'Was ist der Unterschied zwischen SQL JOIN-Arten?', 'Was ist der Unterschied zwischen == und equals() in Java?'],
+  'Rückfragen an die Firma': ['Welche Fragen haben Sie an uns? (Tipp: Einarbeitung, Team, Technologien, Weiterbildung)', 'Was erwarten Sie gehaltlich?']
+};
+let cat = 'Einstieg', qi = 0, tmr = null, left = 90;
+function drawQ() { $('#cats').innerHTML = Object.keys(QS).map(c => `<button class="chip ${c===cat?'on':''}" data-cat="${esc(c)}">${esc(c)}</button>`).join('');
+  const q = QS[cat][qi % QS[cat].length]; $('#q').textContent = q; $('#qMeta').textContent = `${cat} · ${qi % QS[cat].length + 1}/${QS[cat].length}`; $('#ans').value = D?.notes[q] || ''; resetT(); }
+function resetT() { clearInterval(tmr); tmr = null; left = 90; $('#timer').textContent = '1:30'; $('#timer').className = 'timer'; $('#tStart').textContent = 'Timer starten'; }
+$('#tStart').onclick = () => { if (tmr) return resetT(); $('#tStart').textContent = 'Stopp'; tmr = setInterval(() => { left--; $('#timer').textContent = `${Math.floor(Math.max(0,left)/60)}:${String(Math.max(0,left)%60).padStart(2,'0')}`; $('#timer').className = 'timer ' + (left <= 10 ? 'bad' : left <= 30 ? 'warn' : 'acc'); if (left <= 0) { clearInterval(tmr); tmr = null; WB.toast('Zeit um. Kurz und klar ist im Interview gut.'); } }, 1000); };
+$('#qNext').onclick = () => { qi++; drawQ(); };
+$('#cats').onclick = e => { const b = e.target.closest('[data-cat]'); if (b) { cat = b.dataset.cat; qi = 0; drawQ(); } };
+$('#ans').oninput = () => { if (!D) return; D.notes[$('#q').textContent] = $('#ans').value; save(); };
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#tabs button').forEach(x => x.classList.toggle('on', x===b)); ['cv','cl','iv'].forEach(t => $('#t-'+t).classList.toggle('hide', t !== b.dataset.t)); if (b.dataset.t !== 'iv') pages(b.dataset.t); };
+document.addEventListener('click', e => { if (e.target.closest('[data-print]')) window.print(); });
+(async () => {
+  let s, me;
+  // Nur nach erfolgreichem Laden bearbeiten, sonst würde Gespeichertes überschrieben
+  try { [s, me] = await Promise.all([api('/api/data/bewerbung'), WB.me()]); }
+  catch (e) { $('#cvEd').innerHTML = `<div class="card bad">Laden fehlgeschlagen: ${esc(e.message)}. Bitte die Seite neu laden.</div>`; return; }
+  D = !s ? fresh(me.shown) : s.v === 2 ? s : migrate(s, me.shown);
+  document.body.insertAdjacentHTML('beforeend', Object.entries({ ...LISTS, source: ['auf Ihrer Website', 'auf StepStone', 'auf Indeed', 'bei der Agentur für Arbeit', 'auf der Ausbildungsmesse'] }).map(([k, l]) => `<datalist id="dl-${k}">${l.map(x => `<option value="${esc(x)}">`).join('')}</datalist>`).join(''));
+  drawCvEd(); drawClEd(); cv(); cl(); drawQ();
+})();
+</script>
+</body></html>

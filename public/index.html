@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script>
+<title>Werkbank</title>
+<style>
+  .topbar { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
+  .topbar .in { max-width: 1240px; margin: 0 auto; padding: 12px 22px; display: grid; grid-template-columns: auto minmax(0, 560px) auto; gap: 18px; align-items: center; justify-content: space-between; }
+  .brand { display:flex; align-items:center; gap: 10px; font: 700 15px var(--f-display); letter-spacing: .1em; }
+  .brand i { width: 26px; height: 26px; border-radius: 8px; display:grid; place-items:center; background: conic-gradient(from 200deg, #3ddc97, #5aa9ff, #a78bfa, #ff5a6e, #ffbd4a, #3ddc97); }
+  .brand i::after { content:''; width: 12px; height: 12px; background: var(--bg); border-radius: 3px; }
+  .search { position: relative; } .search input { padding: 10px 14px 10px 40px; border-radius: 12px; background: var(--bg2); }
+  .search svg { position:absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+  .search .kbd { position:absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+  .wrap { max-width: 1240px; container-type: inline-size; }
+  /* Cockpit: ab 1280 px links und rechts neben den Kacheln, darunter als Raster unter der Übersicht */
+  .ck, .ck-row:empty { display: none; }
+  body.ck-side .stage { display: grid; grid-template-columns: var(--ckw) minmax(0, 1240px) var(--ckw); justify-content: center; align-items: start; --ckw: clamp(208px, 15.5vw, 272px); }
+  body.ck-side .stage > .wrap { margin: 0; max-width: none; width: 100%; padding-left: 16px; padding-right: 16px; }
+  body.ck-side .ck { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 70px; max-height: calc(100vh - 70px); overflow-y: auto; padding: 26px 0 24px 14px; scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  body.ck-side .ck:hover { scrollbar-color: var(--line2) transparent; }
+  body.ck-side .ck > * { flex: none; }
+  body.ck-side #ckR { padding: 26px 14px 24px 0; }
+  body.ck-side .topbar .in { max-width: 1790px; }
+  .ck-row:not(:empty) { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); grid-auto-flow: dense; gap: 10px; margin: -14px 0 30px; align-items: stretch; }
+  .ck-row .wide { grid-column: span 2; } .ck-row .lamps { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
+  .hero { display:grid; grid-template-columns: 1.05fr 1.25fr .9fr; gap: 14px; margin: 26px 0 30px; }
+  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 18px; padding: 22px; position: relative; overflow: hidden; }
+  .clock-card::before { content:''; position:absolute; inset: -40% -20% auto auto; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 70%); }
+  .greet { font: 600 22px/1.2 var(--f-display); color: var(--mute); position: relative; } .greet b { color: var(--text); font-weight: 600; }
+  .clock { font: 700 clamp(58px, 7vw, 92px)/.95 var(--f-mono); letter-spacing: -.05em; margin-top: 12px; position: relative; }
+  .clock small { font-size: .3em; color: var(--faint); letter-spacing: 0; margin-left: 4px; }
+  .date { color: var(--mute); margin-top: 8px; font-size: 14px; position: relative; }
+  .arc { position: relative; height: 34px; margin-top: 20px; }
+  .arc .track { position:absolute; left:0; right:0; top: 12px; height: 3px; border-radius: 2px; background: var(--line2); }
+  .arc .day { position:absolute; top: 10px; height: 7px; border-radius: 4px; background: linear-gradient(90deg, #ffbd4a, var(--acc), #ff5a6e); opacity: .55; }
+  .arc .now { position:absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 0 5px var(--glow); }
+  .arc .lbl { position:absolute; top: 22px; font: 11px var(--f-mono); color: var(--faint); transform: translateX(-50%); }
+  .today h2 { font-size: 17px; display:flex; align-items:center; gap: 10px; margin-bottom: 8px; }
+  .ti { display:flex; align-items:center; gap: 12px; padding: 9px 8px; margin: 0 -8px; border-radius: 10px; text-decoration:none; color: var(--text); }
+  .ti:hover { background: var(--bg3); }
+  .ti .ic { width: 30px; height: 30px; border-radius: 9px; display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 16%, transparent); flex: none; }
+  .ti .ic { cursor: pointer; transition: background .15s, color .15s; } .ti .ic .ic-off { display: none; }
+  .ti .ic:hover { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+  .ti .ic:hover .ic-app { display: none; } .ti .ic:hover .ic-off { display: grid; }
+  .ti .ic-app, .ti .ic-off { place-items: center; }
+  .ti .tx { flex: 1; min-width: 0; font-size: 14px; } .ti .tx small { display:block; color: var(--faint); font-size: 12px; }
+  .ti .val { font: 600 13px var(--f-mono); color: var(--g); white-space: nowrap; }
+  .ti .val.bad { color: var(--bad); }
+  .wx .t { font: 700 54px/1 var(--f-mono); letter-spacing: -.04em; margin-top: 10px; }
+  .fc { display:grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 16px; }
+  .fc div { text-align:center; padding: 8px 2px; border-radius: 10px; background: var(--bg); font-size: 11px; color: var(--mute); }
+  .fc b { display:block; font: 600 14px var(--f-mono); color: var(--text); margin-top: 2px; }
+  .sec { margin-top: 30px; }
+  .sec-h { display:flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+  .sec-h h2 { font-size: 18px; display:flex; align-items:center; gap: 10px; }
+  .sec-h h2 i { width: 12px; height: 12px; border-radius: 4px; background: var(--g); box-shadow: 0 0 0 4px color-mix(in srgb, var(--g) 18%, transparent); }
+  .sec-h span { color: var(--faint); font-size: 13px; }
+  .tiles { display:grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; }
+  .tile { position: relative; display:grid; grid-template-columns: 44px 1fr; gap: 4px 14px; align-items: start; padding: 16px; text-decoration:none; color: inherit; border-radius: 16px;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--g) 9%, var(--bg2)), var(--bg2) 55%); border: 1px solid var(--line);
+    transition: transform .2s var(--ease), border-color .2s, box-shadow .2s; min-height: 98px; }
+  .tile:hover, .tile:focus-visible { transform: translateY(-2px); border-color: color-mix(in srgb, var(--g) 60%, transparent); box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--g) 60%, transparent); outline: none; }
+  .tile .ico { grid-row: span 3; width: 44px; height: 44px; border-radius: 12px; display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 17%, transparent); border: 1px solid color-mix(in srgb, var(--g) 30%, transparent); }
+  .tile h3 { font-size: 16px; margin-top: 2px; } .tile p { font-size: 12.5px; color: var(--mute); line-height: 1.4; }
+  .tile .live { font: 500 11.5px var(--f-mono); color: var(--text); margin-top: 6px; min-height: 15px; display:flex; align-items:center; gap: 6px; }
+  .tile .live .dot { width: 6px; height: 6px; background: var(--g); }
+  .tile .tact { position:absolute; top: 8px; right: 8px; display:flex; gap: 4px; }
+  .tile .pin, .tile .bell { width: 28px; height: 28px; padding: 0; opacity: 0; background: var(--bg); }
+  .tile:hover .pin, .tile:hover .bell, .tile .pin.on { opacity: 1; } .tile .pin.on { color: var(--g); border-color: var(--g); }
+  .tile .bell.on { color: var(--g); } .tile .bell:not(.on) { color: var(--faint); }
+  .nf { display:flex; align-items:center; gap: 12px; padding: 10px 4px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .nf .ic { width: 30px; height: 30px; border-radius: 9px; display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 16%, transparent); flex:none; }
+  .nf b { display:block; font-size: 14px; } .nf small { color: var(--mute); font-size: 12px; } .nf input { width: 20px; height: 20px; }
+  .tile.hidden { display: none; } .sec.hidden { display: none; }
+  .pinned .tile { min-height: 110px; }
+  .hint { color: var(--faint); font-size: 13px; padding: 14px; border: 1px dashed var(--line2); border-radius: 14px; }
+  .undo { position: fixed; left: 50%; bottom: 22px; transform: translate(-50%, 20px); opacity: 0; display:flex; gap: 14px; align-items:center; padding: 10px 12px 10px 16px;
+    background: var(--text); color: var(--bg); border-radius: 12px; font: 600 13px var(--f-body); z-index: 99; transition: all .25s var(--ease); box-shadow: 0 12px 30px -10px rgba(0,0,0,.5); }
+  .undo.show { opacity: 1; transform: translate(-50%, 0); } .undo button { background: transparent; color: var(--bg); border-color: color-mix(in srgb, var(--bg) 40%, transparent); }
+  .foot { margin-top: 44px; display:flex; justify-content: space-between; color: var(--faint); font-size: 12px; flex-wrap: wrap; gap: 10px; }
+  @container (max-width: 1040px) { .hero { grid-template-columns: 1fr 1fr; } .hero .wx { grid-column: span 2; } }
+  @container (max-width: 660px) { .hero { grid-template-columns: minmax(0,1fr); } .hero .wx { grid-column: auto; } }
+  @media (max-width: 720px) { .topbar .in { grid-template-columns: auto 1fr; } .topbar .search { grid-column: 1 / -1; grid-row: 2; } .topbar .in > .row { justify-content: flex-end; } }
+  @media (max-width: 560px) { .topbar #phase { display: none; } .topbar #adminBtn, .topbar #userBtn { font-size: 0; gap: 0; } }
+</style>
+</head><body>
+<header class="topbar"><div class="in">
+  <div class="brand"><i></i>WERKBANK</div>
+  <label class="search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" placeholder="App suchen und mit Enter öffnen …" autocomplete="off"><span class="kbd">/</span></label>
+  <div class="row" style="gap:4px">
+    <span class="chip" id="phase"></span>
+    <button class="ghost icon" id="theme" title="Design umschalten"></button>
+    <button class="ghost icon hide" id="ckBtn" title="Cockpit einstellen" aria-label="Cockpit einstellen"></button>
+    <a class="btn ghost sm hide" href="/apps/admin" id="adminBtn"></a>
+    <a class="btn ghost sm" href="/apps/konto" id="userBtn"></a>
+    <button class="ghost icon" id="out" title="Überall abmelden"></button>
+  </div>
+</div></header>
+
+<div class="stage">
+<aside class="ck" id="ckL" aria-label="Cockpit links"></aside>
+<main class="wrap">
+  <section class="hero">
+    <div class="card clock-card"><div class="greet" id="greet"></div><div class="clock" id="clock"></div><div class="date" id="date"></div><div class="arc" id="arc"></div></div>
+    <div class="card today"><h2><span class="dot" style="background:var(--acc)"></span>Heute <span class="chip" id="todayCount" style="font-size:11px"></span><span class="grow"></span><button class="ghost sm" id="nfBtn" title="Einstellen, welche Kacheln hier melden">Hinweise einstellen</button></h2><div id="todayList"><div class="faint" style="font-size:13px">Lädt …</div></div></div>
+    <div class="card wx" id="wx"></div>
+  </section>
+  <div class="ck-row" id="ckRow" aria-label="Cockpit"></div>
+
+  <section class="sec pinned" id="pinSec"><div class="sec-h"><h2 style="--g:var(--acc)"><i></i>Angeheftet</h2><span>Deine schnellsten Wege</span></div><div class="tiles" id="pins"></div></section>
+  <div id="groups"></div>
+
+  <div class="foot"><span>Werkbank · läuft in Docker auf deinem Server</span><span><span class="kbd">/</span> suchen · <span class="kbd">Esc</span> in jeder App führt zurück · Stecknadel heftet an</span></div>
+</main>
+<aside class="ck" id="ckR" aria-label="Cockpit rechts"></aside>
+</div>
+<dialog id="ckDlg"><form method="dialog" class="stack"><div class="row between"><h3>Cockpit einstellen</h3><button class="ghost sm">Fertig</button></div>
+  <p class="mute" style="font-size:13px">Leg fest, welche Anzeige wo steht. Auf schmalen Bildschirmen erscheinen sie unter der Übersicht.</p><div id="ckSet"></div></form></dialog>
+
+<dialog id="nfDlg" style="width:min(620px,94vw)"><form method="dialog"><div class="row between" style="margin-bottom:6px"><h3>Hinweise auf der Startseite</h3><button class="ghost sm">Fertig</button></div>
+  <p class="mute" style="font-size:13px;margin-bottom:8px">Leg für jede Kachel fest, ob sie im Bereich „Heute“ melden darf, wenn etwas fehlt oder ansteht. Das geht auch direkt über die Glocke an jeder Kachel.</p>
+  <div id="nfList" style="max-height:60vh;overflow:auto"></div></form></dialog>
+<dialog id="nameDlg"><form class="stack" id="nameF"><h3>Wie möchtest du heißen?</h3>
+  <p class="mute" style="font-size:14px">Dieser Name steht auf deiner Startseite und im Messenger. Anmelden tust du dich weiter mit <b id="nameLogin"></b>. Du kannst ihn jederzeit unter „Mein Konto“ ändern.</p>
+  <label class="field"><span>Dein Name</span><input id="nameIn" maxlength="32" autocomplete="nickname" required></label>
+  <p class="bad" id="nameErr" style="font-size:13px"></p>
+  <div class="row end"><button type="button" class="ghost" id="nameSkip">Später</button><button class="primary">Speichern</button></div></form></dialog>
+<dialog id="cityDlg"><form method="dialog" class="stack">
+  <h3>Ort für das Wetter</h3>
+  <div class="row" style="flex-wrap:nowrap"><input id="cityQ" placeholder="z. B. Berlin"><button type="button" id="citySearch">Suchen</button></div>
+  <div class="list" id="cityRes"></div>
+  <div class="row end"><button value="cancel" class="ghost">Schließen</button></div>
+</form></dialog>
+
+<script>
+const { $, $$, esc, icon, APPS, GROUPS, groupColor, Store, api, eur, today, ymd, parseYmd, daysBetween, PHASE_NAME, applyTheme, cycleTheme, themeMode } = WB;
+let me, hub = { city: null, pins: [], notify: {} }, allowed = [];
+const gc = g => groupColor(g);
+
+function setThemeIcon() { const m = themeMode(); $('#theme').innerHTML = icon(m === 'hell' ? 'sun' : m === 'dunkel' ? 'moon' : 'auto', 17); $('#phase').textContent = PHASE_NAME[applyTheme()] + (m === 'auto' ? ' · auto' : ''); }
+$('#theme').onclick = () => { cycleTheme(); setThemeIcon(); drawArc(); tiles(); loadToday(); };
+$('#out').innerHTML = icon('logout', 17); $('#out').onclick = WB.logout;
+
+// ---------- Uhr ----------
+let sun = null;
+const greetText = h => h < 5 ? 'Noch wach' : h < 10 ? 'Guten Morgen' : h < 14 ? 'Mahlzeit' : h < 17 ? 'Guten Tag' : h < 22 ? 'Guten Abend' : 'Gute Nacht';
+const kw = d => { const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const n = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - n); return Math.ceil(((x - new Date(Date.UTC(x.getUTCFullYear(), 0, 1))) / 864e5 + 1) / 7); };
+function tick() { const d = new Date(), h = d.getHours();
+  $('#greet').innerHTML = `${greetText(h)}, <b>${esc(me?.shown || '')}</b>`;
+  $('#clock').innerHTML = `${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}<small>${String(d.getSeconds()).padStart(2, '0')}</small>`;
+  $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }) + ` · KW ${kw(d)}`;
+  if (d.getSeconds() === 0) { drawArc(); setThemeIcon(); } }
+function drawArc() { const d = new Date(), pct = x => (x / 24 * 100).toFixed(2) + '%', now = d.getHours() + d.getMinutes() / 60;
+  const sr = sun ? sun.rise : 7.5, ss = sun ? sun.set : 16.8, hm = x => `${String(Math.floor(x)).padStart(2, '0')}:${String(Math.round(x % 1 * 60)).padStart(2, '0')}`;
+  $('#arc').innerHTML = `<div class="track"></div><div class="day" style="left:${pct(sr)};width:${pct(ss - sr)}"></div><div class="now" style="left:${pct(now)}" title="jetzt"></div>
+    <span class="lbl" style="left:${pct(sr)}">↑${hm(sr)}</span><span class="lbl" style="left:${pct(ss)}">↓${hm(ss)}</span>`; }
+
+// ---------- Wetter ----------
+const WMO = { 0: 'Klar', 1: 'Überwiegend klar', 2: 'Teils bewölkt', 3: 'Bedeckt', 45: 'Nebel', 48: 'Nebel', 51: 'Nieselregen', 53: 'Nieselregen', 55: 'Nieselregen', 61: 'Leichter Regen', 63: 'Regen', 65: 'Starker Regen', 71: 'Leichter Schnee', 73: 'Schnee', 75: 'Starker Schnee', 80: 'Schauer', 81: 'Schauer', 82: 'Heftige Schauer', 85: 'Schneeschauer', 86: 'Schneeschauer', 95: 'Gewitter', 96: 'Gewitter', 99: 'Gewitter' };
+async function weather() {
+  if (!hub.city) { $('#wx').innerHTML = `<div class="label">Wetter</div><p class="mute" style="margin:12px 0 16px;font-size:14px">Leg deinen Ort fest, dann siehst du Wetter, Vorhersage und den Sonnenstand.</p><button class="primary" id="setCity">Ort wählen</button>`; $('#setCity').onclick = openCity; return; }
+  try { const c = hub.city;
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days=4`).then(r => r.json());
+    const toH = s => { const t = new Date(s); return t.getHours() + t.getMinutes() / 60; }; sun = { rise: toH(r.daily.sunrise[0]), set: toH(r.daily.sunset[0]) }; drawArc();
+    $('#wx').innerHTML = `<div class="row between"><span class="label">${esc(c.name)}</span><button class="ghost sm" id="setCity">ändern</button></div>
+      <div class="t">${Math.round(r.current.temperature_2m)}°</div><div style="margin-top:6px">${WMO[r.current.weather_code] || '–'} <span class="faint" style="font-size:12px">· gefühlt ${Math.round(r.current.apparent_temperature)}° · ${Math.round(r.current.wind_speed_10m)} km/h</span></div>
+      <div class="fc">${r.daily.time.map((t, i) => `<div>${i ? new Date(t).toLocaleDateString('de-DE', { weekday: 'short' }) : 'Heute'}<b>${Math.round(r.daily.temperature_2m_max[i])}°</b>${Math.round(r.daily.temperature_2m_min[i])}° · ${r.daily.precipitation_probability_max[i] ?? 0}%</div>`).join('')}</div>`;
+    $('#setCity').onclick = openCity;
+  } catch { $('#wx').innerHTML = `<div class="label">Wetter</div><p class="mute" style="margin-top:10px">Wetterdienst gerade nicht erreichbar.</p>`; } }
+function openCity() { $('#cityRes').innerHTML = ''; $('#cityDlg').showModal(); $('#cityQ').focus(); }
+async function searchCity() { const q = $('#cityQ').value.trim(); if (!q) return;
+  const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=de`).then(r => r.json()).catch(() => ({}));
+  $('#cityRes').innerHTML = (r.results || []).map((x, i) => `<div class="it"><span class="grow">${esc(x.name)} <span class="faint">${esc([x.admin1, x.country].filter(Boolean).join(', '))}</span></span><button type="button" class="sm" data-c="${i}">Wählen</button></div>`).join('') || '<div class="faint">Nichts gefunden</div>';
+  $$('#cityRes [data-c]').forEach(b => b.onclick = () => { const x = r.results[+b.dataset.c]; hub.city = { name: x.name, lat: x.latitude, lon: x.longitude }; Store.set('hub', hub); $('#cityDlg').close(); weather(); }); }
+$('#nfBtn').onclick = notifyDialog;
+$('#citySearch').onclick = searchCity; $('#cityQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); searchCity(); } };
+
+// ---------- Kacheln ----------
+const tile = a => `<a class="tile" href="/apps/${a.id}" data-id="${a.id}" data-s="${esc((a.t + ' ' + a.d + ' ' + a.g).toLowerCase())}" style="--g:${gc(a.g)}">
+  <span class="ico">${icon(a.id, 21)}</span><h3>${esc(a.t)}</h3><p>${esc(a.d)}</p><div class="live" data-live="${a.id}"></div>
+  <span class="tact">${NOTIFY[a.id] ? `<button class="ghost bell ${notifyOn(a.id) ? 'on' : ''}" data-bell="${a.id}" title="${notifyOn(a.id) ? 'Hinweise auf der Startseite: an. ' : 'Hinweise aus. '}${esc(NOTIFY[a.id].l)}">${icon(notifyOn(a.id) ? 'bell' : 'belloff', 14)}</button>` : ''}
+  <button class="ghost pin ${hub.pins.includes(a.id) ? 'on' : ''}" data-pin="${a.id}" title="${hub.pins.includes(a.id) ? 'Lösen' : 'Anheften'}">${icon('pin', 14)}</button></span></a>`;
+function tiles() {
+  const pins = hub.pins.map(id => allowed.find(a => a.id === id)).filter(Boolean);
+  $('#pins').innerHTML = pins.length ? pins.map(tile).join('') : '<div class="hint">Fahr über eine Kachel und klick auf die Stecknadel, um sie hier oben anzuheften.</div>';
+  $('#groups').innerHTML = Object.keys(GROUPS).map(g => { const l = allowed.filter(a => a.g === g); if (!l.length) return '';
+    return `<section class="sec" data-g="${esc(g)}"><div class="sec-h"><h2 style="--g:${gc(g)}"><i></i>${esc(g)}</h2><span>${esc(GROUPS[g].d)}</span></div><div class="tiles">${l.map(tile).join('')}</div></section>`; }).join('')
+    || '<div class="empty">Dir sind noch keine Seiten freigegeben. Frag den Admin.</div>';
+  live();
+}
+function setNotify(id, on) { hub.notify = { ...(hub.notify || {}), [id]: on }; Store.set('hub', hub); tiles(); loadToday(); }
+let undoEl;
+function undoToast(text, fn) {
+  undoEl?.remove(); undoEl = document.createElement('div'); undoEl.className = 'undo';
+  undoEl.innerHTML = `<span>${esc(text)}</span><button class="sm">Rückgängig</button>`; document.body.appendChild(undoEl);
+  undoEl.querySelector('button').onclick = () => { fn(); undoEl.remove(); };
+  setTimeout(() => undoEl?.classList.add('show'), 10); const el = undoEl; setTimeout(() => el.remove(), 6000);
+}
+document.addEventListener('click', e => { const mu = e.target.closest('[data-mute]'); if (mu) { e.preventDefault(); e.stopPropagation(); const id = mu.dataset.mute;
+    setNotify(id, false); undoToast(`${APPS.find(a => a.id === id).t}: Hinweise ausgeschaltet`, () => setNotify(id, true)); return; }
+  const bl = e.target.closest('[data-bell]'); if (bl) { e.preventDefault(); e.stopPropagation(); const id = bl.dataset.bell;
+    hub.notify = { ...(hub.notify || {}), [id]: !notifyOn(id) }; Store.set('hub', hub); WB.toast(`${APPS.find(a => a.id === id).t}: Hinweise ${notifyOn(id) ? 'an' : 'aus'}`); tiles(); loadToday(); return; }
+  const p = e.target.closest('[data-pin]'); if (!p) return; e.preventDefault(); e.stopPropagation();
+  const id = p.dataset.pin; hub.pins = hub.pins.includes(id) ? hub.pins.filter(x => x !== id) : [...hub.pins, id].slice(-8); Store.set('hub', hub); tiles(); });
+
+// ---------- Daten für „Heute“ und Live-Zeilen ----------
+let cache = {};
+const has = id => allowed.some(a => a.id === id);
+const get = async (k, d) => cache[k] || (cache[k] = await Store.get(k, d));
+const L = (id, html) => $$(`[data-live="${id}"]`).forEach(el => el.innerHTML = html);
+async function live() {
+  const seen = new Set(), setLive = (id, html) => { seen.add(id); L(id, html); };
+  const T = today(), jobs = {
+    finanzen: async () => { const d = await get('finanzen', { tx: [] }); const mk = T.slice(0, 7); let s = 0; d.tx.forEach(t => { if (t.date.startsWith(mk)) s += t.type === 'in' ? t.amount : -t.amount; }); if (d.tx.length) setLive('finanzen', `<span class="dot"></span>Monat ${eur(s, 0)}`); },
+    abos: async () => { const d = await get('abos', { abos: [] }); const a = d.abos.filter(x => !x.cancelled); if (a.length) setLive('abos', `<span class="dot"></span>${a.length} Abos · ${eur(a.reduce((s, x) => s + x.price / x.interval, 0))}/Mon.`); },
+    gewohnheiten: async () => { const d = await get('gewohnheiten', { habits: [] }); if (d.habits.length) setLive('gewohnheiten', `<span class="dot"></span>Heute ${d.habits.filter(h => h.done.includes(T)).length}/${d.habits.length}`); },
+    aufgaben: async () => { const d = await get('aufgaben', { tasks: [] }); const o = d.tasks.filter(t => t.col !== 'fertig'); if (o.length) setLive('aufgaben', `<span class="dot"></span>${o.length} offen`); },
+    notizen: async () => { const d = await get('notizen', { notes: [] }); if (d.notes.length) setLive('notizen', `<span class="dot"></span>${d.notes.length} Notizen`); },
+    fokus: async () => { const d = await get('fokus', { log: [] }); const m = d.log.filter(x => x.d === T).reduce((s, x) => s + x.m, 0); if (m) setLive('fokus', `<span class="dot"></span>Heute ${m} Min`); },
+    lesezeichen: async () => { const d = await get('lesezeichen', { links: null }); if (d.links) setLive('lesezeichen', `<span class="dot"></span>${d.links.length} Links`); },
+    schule: async () => { const d = await get('schule', { grades: [] }); if (d.grades.length) { const s = {}; d.grades.forEach(g => (s[g.s] = s[g.s] || []).push(g)); const av = Object.values(s).map(l => l.reduce((a, g) => a + g.v * g.w, 0) / l.reduce((a, g) => a + g.w, 0)); setLive('schule', `<span class="dot"></span>Schnitt ${(av.reduce((a, b) => a + b, 0) / av.length).toFixed(2).replace('.', ',')}`); } },
+    spiele: async () => { const d = await get('spiele', {}); if (d.snakeHi) setLive('spiele', `<span class="dot"></span>Snake-Rekord ${d.snakeHi}`); },
+    tippen: async () => { const d = await get('tippen', { runs: [] }); if (d.runs.length) setLive('tippen', `<span class="dot"></span>Bestwert ${Math.round(Math.max(...d.runs.map(r => r.wpm)))} WPM`); },
+    lernen: async () => { const d = await get('lernen', { prog: {} }); setLive('lernen', `<span class="dot"></span>${Object.values(d.prog).filter(p => p.box >= 4).length} Karten sicher`); },
+    outfits: async () => setLive('outfits', `<span class="dot"></span>KW ${kw(new Date())} · 6 Looks`),
+    messenger: async () => setLive('messenger', `<span class="dot"></span>E2E-verschlüsselt`),
+    pihole: async () => { const p = await api('/api/pihole').catch(() => null); if (p && p.configured) setLive('pihole', p.ok ? `<span class="dot"></span>${(+p.percent || 0).toFixed(1).replace('.', ',')} % blockiert${p.warnings.length ? ' · <span class="bad">' + p.warnings.length + ' Warnung' + (p.warnings.length > 1 ? 'en' : '') + '</span>' : ''}` : '<span class="bad">● nicht erreichbar</span>'); },
+    monitor: async () => { const m = await api('/api/monitor').catch(() => null); if (m && m.targets.length) { const down = m.targets.filter(t => m.state[t.id] && m.state[t.id].up === false).length; setLive('monitor', down ? `<span class="bad">● ${down} offline</span>` : `<span class="dot"></span>${m.targets.length} Dienste online`); } },
+    protokoll: async () => { const p = await api('/api/protokoll/anmeldungen').catch(() => null); if (p) setLive('protokoll', `<span class="dot"></span>24 h: ${p.sum.ok} angemeldet · <span class="${p.sum.failed ? 'bad' : ''}">${p.sum.failed} fehlgeschlagen</span>`); },
+    docker: async () => { const d = await api('/api/docker').catch(() => null); if (!d) return; const bad = d.containers.filter(c => c.problem).length;
+      setLive('docker', d.stale ? '<span class="bad">● keine aktuellen Daten</span>' : `<span class="dot"></span>${d.containers.filter(c => c.state === 'running').length}/${d.containers.length} laufen${bad ? ` · <span class="bad">${bad} auffällig</span>` : ''}`); },
+    wartung: async () => { const d = await api('/api/wartung').catch(() => null); if (!d) return; if (d.stale) return setLive('wartung', '<span class="bad">● keine aktuellen Daten</span>'); const a = d.apt || {}, disk = (d.disks || []).find(x => x.mount === '/');
+      setLive('wartung', `<span class="dot"></span>${a.count ?? '?'} Updates${disk ? ` · Platte ${disk.percent} %` : ''}${d.backups.length ? '' : ' · <span class="bad">keine Sicherung</span>'}`); },
+    geraete: async () => { const d = await api('/api/geraete').catch(() => null); if (!d || !d.t) return; const neu = d.devices.filter(x => !x.known).length;
+      setLive('geraete', `<span class="dot"></span>${d.devices.filter(x => x.online).length} online${neu ? ` · <span class="bad">${neu} neu</span>` : ''}`); },
+    pakete: async () => { const d = await get('pakete', { pakete: [] }); const n = d.pakete.filter(p => !p.done).length; if (n) setLive('pakete', `<span class="dot"></span>${n} offen`); },
+    system: async () => { const s = await api('/api/system').catch(() => null); if (s) setLive('system', `<span class="dot"></span>RAM ${Math.round((1 - s.mem.free / s.mem.total) * 100)} %${s.disk ? ' · Disk ' + Math.round((1 - s.disk.free / s.disk.total) * 100) + ' %' : ''}`); }
+  };
+  await Promise.all(Object.entries(jobs).filter(([k]) => has(k)).map(([, f]) => f().catch(() => {})));
+  Object.keys(jobs).filter(k => !seen.has(k)).forEach(k => L(k, '')); // z. B. alle Aufgaben erledigt: alte Zeile entfernen
+}
+// ---------- Hinweise: jede Kachel meldet, was fehlt (pro Kachel abschaltbar) ----------
+const NOTIFY = {
+  aufgaben: { l: 'Fällige und überfällige Aufgaben', def: true },
+  schule: { l: 'Nächste Schulstunde heute', def: true },
+  berichtsheft: { l: 'Berichtsheft der Woche unvollständig (ab Donnerstag) und fehlende Vorwochen', def: true },
+  gewohnheiten: { l: 'Gewohnheiten, die heute noch offen sind', def: true },
+  lernen: { l: 'Fällige Karteikarten im C#-Trainer', def: true },
+  abos: { l: 'Kündigungsfristen in den nächsten 14 Tagen', def: true },
+  finanzen: { l: 'Mehr ausgegeben als eingenommen, Sparziel erreicht', def: true },
+  countdown: { l: 'Termine in den nächsten 14 Tagen', def: true },
+  reisen: { l: 'Reise in den nächsten 14 Tagen mit offener Packliste', def: true },
+  kueche: { l: 'Offene Punkte auf der Einkaufsliste', def: false },
+  fokus: { l: 'Heute noch keine Fokusrunde (ab 14 Uhr)', def: false },
+  notizen: { l: 'Offene Checklistenpunkte in angehefteten Notizen', def: false },
+  messenger: { l: 'Ungelesene Nachrichten', def: true },
+  wochenbericht: { l: 'Neuer Wochenbericht ist da (Montag und Dienstag)', def: true },
+  outfits: { l: 'Neue Outfits der Woche (Montag und Dienstag)', def: true },
+  pihole: { l: 'Pi-hole-Warnungen, Blocker aus oder nicht erreichbar', def: true },
+  monitor: { l: 'Ausgefallene Dienste und ablaufende Zertifikate', def: true },
+  system: { l: 'Speicherplatz oder Arbeitsspeicher knapp', def: true },
+  protokoll: { l: 'Gesperrte Anmeldungen und viele Fehlversuche', def: true },
+  docker: { l: 'Abgestürzte, neu gestartete oder „unhealthy“ Container', def: true },
+  wartung: { l: 'Sicherung älter als 7 Tage, Platte voll, Updates, Neustart nötig', def: true },
+  geraete: { l: 'Neue, unbekannte Geräte im Heimnetz', def: true },
+  pakete: { l: 'Pakete in Zustellung, abholbereit, zugestellt oder mit Problem', def: true }
+};
+const notifyOn = id => (hub.notify && id in hub.notify) ? hub.notify[id] : !!(NOTIFY[id] && NOTIFY[id].def);
+const addMonths = (s, m) => { const x = parseYmd(s); const day = x.getDate(); x.setDate(1); x.setMonth(x.getMonth() + m); x.setDate(Math.min(day, new Date(x.getFullYear(), x.getMonth() + 1, 0).getDate())); return ymd(x); };
+const minusN = (s, n, u) => { const x = parseYmd(s); if (u === 'd') x.setDate(x.getDate() - n); else if (u === 'w') x.setDate(x.getDate() - 7 * n); else x.setMonth(x.getMonth() - n); return ymd(x); };
+const PRODUCERS = {
+  aufgaben: async T => { const d = await get('aufgaben', { tasks: [] }); const o = d.tasks.filter(t => t.col !== 'fertig' && t.due && t.due <= T); const over = o.filter(t => t.due < T).length;
+    return o.length ? [{ text: o.length === 1 ? o[0].t : `${o.length} Aufgaben fällig`, sub: over ? `${over} davon überfällig` : 'heute fällig', val: o.length, bad: !!over }] : []; },
+  schule: async (T, now) => { const d = await get('schule', { plan: {}, times: [] }); const wd = (now.getDay() + 6) % 7; if (wd > 4) return []; const hm = now.toTimeString().slice(0, 5);
+    const l = (d.times || []).map((t, s) => ({ t, c: d.plan[wd + '-' + s] })).filter(x => x.c && x.c.fach && x.t[1] > hm);
+    return l.length ? [{ text: `${l[0].t[0] <= hm ? 'Jetzt' : 'Ab ' + l[0].t[0]}: ${l[0].c.fach}`, sub: [...new Set(l.slice(1).map(x => x.c.fach))].slice(0, 3).join(', ') || 'letzte Stunde heute', val: l[0].c.raum || '' }] : []; },
+  berichtsheft: async (T, now) => { const d = await get('berichtsheft', { weeks: {}, cfg: {} }); const out = []; const done = w => w && (w.signed || w.days.filter(x => x.txt.trim() || ['Urlaub', 'Krank', 'Feiertag'].includes(x.ort)).length === 5);
+    const mon = new Date(now); mon.setHours(12); mon.setDate(mon.getDate() - ((mon.getDay() + 6) % 7));
+    if ((now.getDay() >= 4 || now.getDay() === 0) && !done(d.weeks[ymd(mon)])) out.push({ text: `Berichtsheft KW ${kw(now)} ausfüllen`, sub: 'diese Woche noch nicht vollständig', val: 'offen' });
+    if (d.cfg && d.cfg.start) { let miss = 0; const x = new Date(parseYmd(d.cfg.start)); x.setHours(12); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); while (x < mon) { if (!done(d.weeks[ymd(x)])) miss++; x.setDate(x.getDate() + 7); }
+      if (miss) out.push({ text: `${miss} ältere Berichtsheft-Woche${miss > 1 ? 'n' : ''} offen`, sub: 'seit Ausbildungsbeginn', val: miss, bad: miss > 2 }); }
+    return out; },
+  gewohnheiten: async T => { const d = await get('gewohnheiten', { habits: [] }); if (!d.habits.length) return []; const open = d.habits.filter(h => !h.done.includes(T));
+    return open.length ? [{ text: 'Gewohnheiten offen', sub: open.map(h => h.name).slice(0, 3).join(', '), val: `${d.habits.length - open.length}/${d.habits.length}` }] : []; },
+  lernen: async T => { const d = await get('lernen', { prog: {}, own: [] }); const seen = Object.values(d.prog); const due = seen.filter(p => p.due <= T).length + Math.max(0, 37 + (d.own || []).length - seen.length);
+    return due ? [{ text: `${due} Karteikarten fällig`, sub: 'C# für Java-Entwickler', val: due }] : []; },
+  abos: async T => { const d = await get('abos', { abos: [] });
+    const l = d.abos.filter(a => !a.cancelled).map(a => { let r = a.renew; while (r < T) r = addMonths(r, a.interval); let dl = minusN(r, a.notice, a.unit); if (dl < T) { r = addMonths(r, a.interval); dl = minusN(r, a.notice, a.unit); } return { a, days: daysBetween(T, dl) }; }).filter(x => x.days <= 14).sort((x, y) => x.days - y.days);
+    return l.slice(0, 2).map(x => ({ text: `Frist: ${x.a.name}`, sub: 'kündigen oder behalten?', val: x.days ? `${x.days} T` : 'heute', bad: x.days <= 3 })); },
+  finanzen: async T => { const d = await get('finanzen', { tx: [], goals: [] }); const out = []; const mk = T.slice(0, 7); let i = 0, o = 0; d.tx.forEach(t => { if (t.date.startsWith(mk)) t.type === 'in' ? i += t.amount : o += t.amount; });
+    if (o > i && i > 0) out.push({ text: 'Mehr ausgegeben als eingenommen', sub: `diesen Monat ${eur(o - i, 0)} im Minus`, val: eur(i - o, 0), bad: true });
+    (d.goals || []).filter(g => g.saved >= g.target && !g.seen).forEach(g => out.push({ text: `Sparziel erreicht: ${g.name}`, sub: eur(g.target, 0) + ' zusammen', val: '✓' }));
+    return out; },
+  countdown: async (T, now) => { const d = await get('countdown', { items: [] });
+    return d.items.map(it => { const t = new Date(it.date + 'T' + (it.time || '00:00')); if (it.kind === 'yearly') { t.setFullYear(now.getFullYear()); if (t < now && t.toDateString() !== now.toDateString()) t.setFullYear(now.getFullYear() + 1); } return { it, t, dd: Math.round((new Date(t.toDateString()) - new Date(now.toDateString())) / 864e5) }; })
+      .filter(x => x.dd >= 0 && x.dd <= 14).sort((a, b) => a.dd - b.dd).slice(0, 2).map(x => ({ text: x.it.name, sub: x.t.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }), val: x.dd ? `${x.dd} T` : 'heute' })); },
+  reisen: async T => { const d = await get('reisen', { trips: [] }); return d.trips.filter(t => { const dd = daysBetween(T, t.from); return dd >= 0 && dd <= 14 && t.pack.some(p => !p.d); })
+      .map(t => ({ text: `Reise nach ${t.dest}`, sub: `Packliste ${t.pack.filter(p => p.d).length}/${t.pack.length}`, val: `${daysBetween(T, t.from)} T` })); },
+  kueche: async () => { const d = await get('kueche', { extra: [], checked: [] }); const n = (d.extra || []).filter(x => !(d.checked || []).includes(x)).length; return n ? [{ text: 'Einkaufsliste', sub: `${n} offene Extras`, val: n }] : []; },
+  fokus: async (T, now) => { if (now.getHours() < 14) return []; const d = await get('fokus', { log: [] }); return d.log.some(x => x.d === T) ? [] : [{ text: 'Noch keine Fokusrunde heute', sub: '25 Minuten reichen', val: '0' }]; },
+  notizen: async () => { const d = await get('notizen', { notes: [] }); return d.notes.filter(n => n.pin).map(n => ({ n, c: (n.b.match(/^\s*[-*] \[ \]/gm) || []).length })).filter(x => x.c).map(x => ({ text: x.n.t || 'Notiz', sub: 'offene Checklistenpunkte', val: x.c })); },
+  messenger: async () => { const [u, p] = await Promise.all([api('/api/msg/users').catch(() => []), get('messenger', { lastRead: {} })]); const n = u.filter(c => c.last && c.lastFrom === c.id && c.last > ((p.lastRead || {})[c.id] || 0));
+    return n.length ? [{ text: n.length === 1 ? `Neue Nachricht von ${n[0].name}` : `${n.length} ungelesene Chats`, sub: 'Ende-zu-Ende-verschlüsselt', val: n.length }] : []; },
+  wochenbericht: async (T, now) => { if (![1, 2].includes(now.getDay())) return []; const l = await api('/api/news/reports').catch(() => []); const cur = `${now.getFullYear()}-W${String(kw(now)).padStart(2, '0')}`;
+    return l[0] === cur ? [{ text: 'Neuer Wochenbericht', sub: 'News zu deinen Themen', val: 'neu' }] : []; },
+  outfits: async (T, now) => [1, 2].includes(now.getDay()) ? [{ text: 'Neue Outfits der Woche', sub: '6 Looks in Schwarz-Weiß und Schwarz-Rot', val: 'neu' }] : [],
+  pihole: async () => { const p = await api('/api/pihole').catch(() => null); if (!p || !p.configured) return []; return (p.warnings || []).slice(0, 3).map(w => ({ text: 'Pi-hole', sub: w, val: '!', bad: true })); },
+  monitor: async () => { const m = await api('/api/monitor').catch(() => null); if (!m) return []; const out = [];
+    m.targets.forEach(t => { const s = m.state[t.id]; if (s && s.up === false) out.push({ text: `${t.name} offline`, sub: s.error || 'nicht erreichbar', val: '✕', bad: true }); else if (s && s.warn) out.push({ text: t.name, sub: s.warn, val: s.days + ' T' }); });
+    return out.slice(0, 4); },
+  protokoll: async () => { const [s, a] = await Promise.all([api('/api/protokoll/sperren'), api('/api/protokoll/anmeldungen?filter=fehler')]); const out = [];
+    if (s.length) out.push({ text: s.length === 1 ? 'Eine Anmeldesperre aktiv' : `${s.length} Anmeldesperren aktiv`, sub: [...new Set(s.map(x => x.ip || x.name))].slice(0, 3).join(', '), val: s.length, bad: true });
+    if (a.sum.failed >= 5) out.push({ text: 'Viele fehlgeschlagene Anmeldungen', sub: `von ${a.sum.failedIps} Adresse(n) in 24 h`, val: a.sum.failed, bad: true }); return out; },
+  docker: async () => { const d = await api('/api/docker'); if (d.stale) return [{ text: 'Docker-Übersicht ohne aktuelle Daten', sub: 'Sammler auf dem Server prüfen', val: '?', bad: true }];
+    return d.containers.filter(c => c.problem).slice(0, 4).map(c => ({ text: `Container ${c.name}`, sub: c.problem, val: '!', bad: true })); },
+  wartung: async () => (await api('/api/wartung')).warnings,
+  geraete: async () => { const n = (await api('/api/geraete')).devices.filter(x => !x.known);
+    return n.length ? [{ text: n.length === 1 ? 'Unbekanntes Gerät im Netz' : `${n.length} unbekannte Geräte im Netz`, sub: n.map(x => x.name || x.host || x.mac).slice(0, 3).join(', '), val: n.length, bad: true }] : []; },
+  pakete: async () => { const d = await get('pakete', { pakete: [] }); const open = d.pakete.filter(p => !p.done); if (!open.length) return [];
+    const live = (await api('/api/pakete/status').catch(() => ({ status: {} }))).status;
+    return open.map(p => { const c = p.dienst === 'dhl' ? live[p.nr] : null, name = p.inhalt || p.nr;
+      if (c?.code === 'delivered') return { text: `Zugestellt: ${name}`, sub: c.text, val: '✓' };
+      if (c?.code === 'failure') return { text: `Problem: ${name}`, sub: c.text, val: '!', bad: true };
+      if (!c?.code && p.stand === 'zustellung') return { text: `Kommt heute: ${name}`, sub: 'in Zustellung', val: '→' };
+      if (!c?.code && p.stand === 'abholbereit') return { text: `Abholen: ${name}`, sub: 'liegt bereit', val: '!' };
+      if (c?.code && /zustellfahrzeug|in zustellung|abhol|filiale|packstation/i.test(c.text)) return { text: name, sub: c.text, val: '→' };
+      return null; }).filter(Boolean).slice(0, 4); },
+  system: async () => { const s = await api('/api/system').catch(() => null); return s ? s.warnings.map(w => ({ text: 'System', sub: w, val: '!', bad: true })) : []; }
+};
+let todayItems = [], showAll = false;
+async function loadToday() {
+  cache = {}; const T = today(), now = new Date(); const items = [];
+  await Promise.all(Object.keys(PRODUCERS).filter(id => has(id) && notifyOn(id)).map(id => PRODUCERS[id](T, now).then(l => l.forEach(x => items.push({ ...x, id, g: APPS.find(a => a.id === id).g }))).catch(() => {})));
+  const order = Object.keys(PRODUCERS); items.sort((a, b) => (b.bad ? 1 : 0) - (a.bad ? 1 : 0) || order.indexOf(a.id) - order.indexOf(b.id));
+  todayItems = items; drawToday(); live();
+}
+function drawToday() {
+  const items = todayItems, max = showAll ? 99 : 6;
+  $('#todayList').innerHTML = items.length ? items.slice(0, max).map(i => `<a class="ti" href="/apps/${i.id}" style="--g:${gc(i.g)}"><span class="ic" data-mute="${i.id}" title="Hinweise von ${esc(APPS.find(a => a.id === i.id).t)} ausschalten"><span class="ic-app">${icon(i.id, 16)}</span><span class="ic-off">${icon('belloff', 16)}</span></span><span class="tx">${esc(i.text)}<small>${esc(i.sub || '')}</small></span><span class="val ${i.bad ? 'bad' : ''}">${esc(String(i.val ?? ''))}</span></a>`).join('')
+      + (items.length > 6 ? `<button class="ghost sm" id="more" style="margin-top:4px">${showAll ? 'Weniger anzeigen' : `+ ${items.length - 6} weitere`}</button>` : '')
+    : `<div style="padding:18px 0"><div style="font:600 18px var(--f-display)">Alles erledigt.</div><p class="mute" style="font-size:13px;margin-top:6px">Nichts Fälliges, keine Warnungen. Welche Kacheln hier melden dürfen, stellst du mit der Glocke ein. Fahr über ein Symbol, um die Hinweise einer Kachel direkt hier auszuschalten.</p></div>`;
+  const m = $('#more'); if (m) m.onclick = () => { showAll = !showAll; drawToday(); };
+  $('#todayCount').textContent = items.length ? items.length : '';
+}
+function notifyDialog() {
+  const l = allowed.filter(a => NOTIFY[a.id]);
+  $('#nfList').innerHTML = l.map(a => `<label class="nf" style="--g:${gc(a.g)}"><span class="ic">${icon(a.id, 15)}</span><span class="grow"><b>${esc(a.t)}</b><small>${esc(NOTIFY[a.id].l)}</small></span><input type="checkbox" data-nf="${a.id}" ${notifyOn(a.id) ? 'checked' : ''}></label>`).join('');
+  $('#nfDlg').showModal();
+}
+document.addEventListener('change', e => { const c = e.target.closest('[data-nf]'); if (!c) return; hub.notify = { ...(hub.notify || {}), [c.dataset.nf]: c.checked }; Store.set('hub', hub); tiles(); loadToday(); });
+
+// ---------- Cockpit ----------
+let ckCfg = null, ckUpdate = null, ckData = null, ckTimer = null, ckBusy = false;
+const ckWide = matchMedia('(min-width: 1280px)');
+function ckBuild() {
+  const on = me.cockpit && ckCfg.on && (ckCfg.left.length + ckCfg.right.length) > 0, side = on && ckWide.matches;
+  document.body.classList.toggle('ck-side', side);
+  for (const id of ['#ckL', '#ckR', '#ckRow']) $(id).innerHTML = '';
+  clearInterval(ckTimer); ckUpdate = null; if (!on) return;
+  const targets = side ? [[$('#ckL'), ckCfg.left], [$('#ckR'), ckCfg.right]] : [[$('#ckRow'), [...ckCfg.left, ...ckCfg.right]]];
+  ckUpdate = WB.Cockpit.mount(targets, { apps: me.apps });
+  if (ckData) ckUpdate(ckData);
+  ckLoad(); ckTimer = setInterval(ckLoad, 5000);
+}
+async function ckLoad() {
+  if (document.hidden || ckBusy || !ckUpdate) return; ckBusy = true;
+  try { ckData = await api('/api/cockpit'); ckUpdate?.(ckData); }
+  catch (e) { if (/abgeschaltet/.test(e.message)) { me.cockpit = false; $('#ckBtn').classList.add('hide'); ckBuild(); } }
+  finally { ckBusy = false; }
+}
+async function ckInit() {
+  if (!me.cockpit) return;
+  let saved = null; try { saved = await api('/api/data/cockpit'); } catch {}
+  ckCfg = WB.Cockpit.normalize(saved);
+  $('#ckBtn').classList.remove('hide'); $('#ckBtn').innerHTML = icon('cockpit', 18);
+  $('#ckBtn').onclick = () => { WB.Cockpit.settings($('#ckSet'), ckCfg, c => { Store.set('cockpit', c); ckBuild(); }); $('#ckDlg').showModal(); };
+  ckWide.addEventListener('change', ckBuild); document.addEventListener('visibilitychange', ckLoad);
+  ckBuild();
+}
+
+// ---------- Eigener Name (einmal nach dem ersten Anmelden) ----------
+function askName() {
+  const d = $('#nameDlg'); $('#nameLogin').textContent = me.name; $('#nameIn').value = me.shown;
+  const send = body => api('/api/auth/name', { method: 'POST', body });
+  $('#nameSkip').onclick = () => { send({ skip: true }).catch(() => {}); d.close(); };
+  $('#nameF').onsubmit = async e => { e.preventDefault(); try { const r = await send({ display: $('#nameIn').value }); me.shown = r.shown; $('#userBtn').innerHTML = icon('konto', 15) + esc(me.shown); tick(); d.close(); WB.toast('Hallo ' + me.shown + '!'); } catch (err) { $('#nameErr').textContent = err.message; } };
+  d.showModal(); $('#nameIn').select();
+}
+
+// ---------- Suche ----------
+$('#q').oninput = e => { const q = e.target.value.trim().toLowerCase(); $('#pinSec').classList.toggle('hidden', !!q);
+  $$('#groups .tile').forEach(t => t.classList.toggle('hidden', !!q && !q.split(/\s+/).every(w => t.dataset.s.includes(w))));
+  $$('#groups .sec').forEach(s => s.classList.toggle('hidden', !s.querySelector('.tile:not(.hidden)'))); };
+$('#q').onkeydown = e => { if (e.key === 'Enter') { const t = $('#groups .tile:not(.hidden)'); if (t) location.href = t.href; } if (e.key === 'Escape') { e.target.value = ''; e.target.oninput({ target: e.target }); e.target.blur(); } };
+document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== $('#q')) { e.preventDefault(); $('#q').focus(); } });
+
+(async () => {
+  me = await WB.me(); allowed = APPS.filter(a => me.apps.includes(a.id));
+  if (me.admin) { $('#adminBtn').classList.remove('hide'); $('#adminBtn').innerHTML = icon('admin', 15) + 'Verwaltung'; }
+  $('#userBtn').innerHTML = icon('konto', 15) + esc(me.shown);
+  setThemeIcon(); tick(); setInterval(tick, 1000); drawArc();
+  hub = Object.assign(hub, await Store.get('hub', hub)); if (!Array.isArray(hub.pins)) hub.pins = [];
+  if (!hub.pins.length && !hub.pinsInit) { hub.pins = ['aufgaben', 'berichtsheft', 'schule', 'outfits'].filter(has); hub.pinsInit = true; Store.set('hub', hub); }
+  tiles(); loadToday(); weather(); ckInit();
+  if (me.askName) askName();
+  setInterval(weather, 15 * 60e3); setInterval(loadToday, 60e3); document.addEventListener('visibilitychange', () => { if (!document.hidden) loadToday(); });
+})();
+</script>
+</body></html>

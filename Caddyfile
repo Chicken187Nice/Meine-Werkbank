@@ -1,0 +1,32 @@
+{
+	servers {
+		listener_wrappers {
+			proxy_protocol {
+				timeout 5s
+				allow 0.0.0.0/0
+			}
+			tls
+		}
+	}
+}
+
+# Caddy holt automatisch ein Let's-Encrypt-Zertifikat für deine Domain und erneuert es.
+# HTTP wird automatisch auf HTTPS umgeleitet, nur TLS 1.2/1.3.
+{$WB_DOMAIN} {
+	encode zstd gzip
+	tls {
+		protocols tls1.2 tls1.3
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy werkbank:8082 {
+		header_up X-Forwarded-Proto https
+	}
+}
+
+# Port 80 ausdrücklich anlegen, damit auch hier der PROXY-Kopf angenommen wird
+http://{$WB_DOMAIN} {
+	redir https://{host}{uri} permanent
+}

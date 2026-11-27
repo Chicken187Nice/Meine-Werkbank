@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Countdowns</title>
+<style>
+  .cds { display:grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .cd { position: relative; overflow: hidden; }
+  .cd .n { font: 700 54px/1 var(--f-mono); letter-spacing: -.03em; margin-top: 14px; }
+  .cd .u { font-size: 13px; color: var(--mute); }
+  .cd .live { font: 500 13px var(--f-mono); color: var(--mute); margin-top: 8px; }
+  .cd .bg { position:absolute; right:-10px; bottom:-26px; font: 700 120px/1 var(--f-display); color: var(--line); pointer-events:none; }
+  .cd.soon .n { color: var(--acc); } .cd.past { opacity: .5; }
+  .cd .x { position:absolute !important; top: 12px; right: 12px; z-index: 3; }
+  .cd > * { position: relative; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">16 · Werkzeug</div><h1>Countdowns</h1><p>Worauf freust du dich, was steht an? Geburtstage und Jahrestage wiederholen sich automatisch jedes Jahr.</p></div>
+    <form class="row" id="f"><input name="cname" placeholder="Was?" required style="width:200px"><input name="date" type="date" required style="width:160px"><input name="time" type="time" style="width:110px"><select name="kind" style="width:150px"><option value="once">einmalig</option><option value="yearly">jährlich</option></select><button class="primary">+</button></form>
+  </div>
+  <div class="cds" id="list"></div>
+  <div class="panel" style="margin-top:14px"><div class="label" style="margin-bottom:10px">Feste Termine (automatisch)</div><div class="row" id="fixed"></div></div>
+</main>
+<script>
+WB.header('countdown');
+const { $, esc, uid, ymd, parseYmd, Store } = WB;
+let D = { items: [] };
+const save = () => Store.set('countdown', D);
+function easter(y) { const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1; return new Date(y, mo-1, da); }
+function target(it) { const [h, mi] = (it.time || '00:00').split(':').map(Number); let d = parseYmd(it.date); d.setHours(h, mi);
+  if (it.kind === 'yearly') { const n = new Date(); d.setFullYear(n.getFullYear()); if (d < n && !(d.toDateString() === n.toDateString())) d.setFullYear(n.getFullYear() + 1); } return d; }
+function fmtLeft(ms) { const s = Math.abs(Math.floor(ms/1000)); return `${Math.floor(s/86400)}T ${String(Math.floor(s%86400/3600)).padStart(2,'0')}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+function render() {
+  const now = new Date(); const l = D.items.map(it => ({ it, t: target(it) })).sort((a,b) => a.t - b.t);
+  $('#list').innerHTML = l.length ? l.map(({ it, t }) => { const ms = t - now, days = Math.ceil((new Date(t.getFullYear(),t.getMonth(),t.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate())) / 864e5);
+    const age = it.kind === 'yearly' ? t.getFullYear() - parseYmd(it.date).getFullYear() : 0;
+    return `<div class="panel cd ${ms < 0 ? 'past' : days <= 7 ? 'soon' : ''}"><span class="bg">${String(t.getDate()).padStart(2,'0')}</span><span class="x" style="display:flex;gap:2px"><button class="ghost sm" data-ed="${it.id}" title="Bearbeiten">✎</button><button class="ghost sm" data-del="${it.id}">✕</button></span>
+      <div class="label">${it.kind === 'yearly' ? 'jährlich' : 'einmalig'}${age > 0 ? ' · wird ' + age : ''}</div><div style="font:600 18px var(--f-display);margin-top:6px">${esc(it.name)}</div>
+      <div class="n">${ms < 0 ? '✓' : days === 0 ? 'Heute' : days}</div><div class="u">${ms < 0 ? 'vorbei' : days === 0 ? '' : days === 1 ? 'Tag' : 'Tage'} · ${t.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div class="live" data-live="${t.getTime()}">${ms > 0 ? fmtLeft(ms) : ''}</div></div>`; }).join('') : '<div class="empty" style="grid-column:1/-1">Leg deinen ersten Countdown an: Urlaub, Geburtstag, Prüfung …</div>';
+  const y = now.getFullYear(); const F = [['Weihnachten', new Date(y,11,24)], ['Silvester', new Date(y,11,31)], ['Ostersonntag', easter(y)], ['Sommeranfang', new Date(y,5,21)], ['Wochenende', (() => { const d = new Date(now); d.setDate(d.getDate() + ((6 - d.getDay() + 7) % 7)); return d; })()]]
+    .map(([n, d]) => { if (d < new Date(y, now.getMonth(), now.getDate())) d = n === 'Ostersonntag' ? easter(y+1) : new Date(d.setFullYear(y+1)); return [n, d]; });
+  $('#fixed').innerHTML = F.map(([n, d]) => `<span class="chip">${n}: <b class="mono" style="color:var(--text)">${Math.round((d - new Date(y, now.getMonth(), now.getDate())) / 864e5)}</b> Tage</span>`).join('');
+}
+setInterval(() => document.querySelectorAll('[data-live]').forEach(el => { const ms = +el.dataset.live - Date.now(); el.textContent = ms > 0 ? fmtLeft(ms) : ''; }), 1000);
+$('#f').onsubmit = e => { e.preventDefault(); const f = e.target; D.items.push({ id: uid(), name: f.cname.value.trim(), date: f.date.value, time: f.time.value, kind: f.kind.value }); f.reset(); save(); render(); };
+document.addEventListener('click', e => { const ed = e.target.closest('[data-ed]'); if (ed) { const it = D.items.find(x => x.id === ed.dataset.ed);
+    WB.editForm('Countdown bearbeiten', [{ k: 'name', l: 'Was?', v: it.name, req: true }, { k: 'date', l: 'Datum', type: 'date', v: it.date, req: true }, { k: 'time', l: 'Uhrzeit (optional)', type: 'time', v: it.time || '' }, { k: 'kind', l: 'Wiederholung', type: 'select', v: it.kind, opts: [['once', 'einmalig'], ['yearly', 'jährlich']] }])
+      .then(v => { if (v && v !== 'delete') { Object.assign(it, v); save(); render(); } }); return; }
+  const b = e.target.closest('[data-del]'); if (b && confirm('Löschen?')) { D.items = D.items.filter(x => x.id !== b.dataset.del); save(); render(); } });
+(async () => { D = Object.assign(D, await Store.get('countdown', D)); render(); })();
+</script>
+</body></html>

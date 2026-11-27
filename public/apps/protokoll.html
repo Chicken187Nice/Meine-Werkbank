@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Protokoll</title>
+<style>
+  .bars { display:flex; align-items:end; gap:2px; height:120px; border-bottom:1px solid var(--line2); }
+  .bars div { flex:1; height:100%; display:flex; align-items:end; justify-content:center; }
+  .bars div:hover { background: var(--bg3); }
+  .bars i { display:block; width:100%; max-width:24px; background: var(--acc); border-radius:4px 4px 0 0; }
+  .axis { display:flex; gap:2px; margin-top:6px; } .axis span { flex:1; text-align:center; font:500 11px var(--f-mono); color:var(--mute); }
+  .tw { overflow:auto; max-height:520px; } table.t { font-size:13px; } table.t th { position:sticky; top:0; background:var(--bg2); } table.t td { white-space:nowrap; vertical-align:top; }
+  td.path { max-width:320px; overflow:hidden; text-overflow:ellipsis; } td.ua { max-width:220px; overflow:hidden; text-overflow:ellipsis; color:var(--mute); }
+  .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; } .filters select { width:auto; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>Protokoll</h1><p>Wer ruft die Werkbank auf, und wer meldet sich an? Nur für Admins. Aktualisiert sich alle 10 Sekunden.</p></div>
+    <span class="mute" id="upd" style="font-size:12px"></span>
+  </div>
+  <div class="tabs" id="tabs"><button data-tab="traffic" class="on">Zugriffe</button><button data-tab="logins">Anmeldungen</button></div>
+
+  <section id="traffic" style="margin-top:14px">
+    <div class="filters">
+      <select id="day" aria-label="Tag"></select>
+      <select id="src" aria-label="Herkunft"><option value="">Jede Herkunft</option><option value="tunnel">Tunnel (Internet)</option><option value="internet">Internet direkt</option><option value="heimnetz">Heimnetz</option><option value="tailscale">Tailscale</option></select>
+      <label class="row" style="gap:8px"><input type="checkbox" id="errOnly"> in der Liste nur Fehler</label>
+    </div>
+    <div class="g4" id="tkpi" style="margin-top:14px"></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Anfragen pro Stunde</span></div><div class="bars" id="bars"></div><div class="axis" id="axis"></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Häufigste Adressen</span></div><div class="tw" id="ips"></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Letzte Zugriffe (höchstens 300)</span></div><div class="tw" id="reqs"></div></div>
+    <p class="mute" id="tnote" style="font-size:12px;margin-top:10px"></p>
+  </section>
+
+  <section id="logins" class="hide" style="margin-top:14px">
+    <div class="filters"><select id="lf" aria-label="Ergebnis"><option value="">Alle Versuche</option><option value="ok">Nur erfolgreiche</option><option value="fehler">Nur fehlgeschlagene</option><option value="offen">Passwort richtig, Code fehlte</option></select></div>
+    <div class="g3" id="lkpi" style="margin-top:14px"></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Aktuell gesperrt</span></div><div class="tw" id="locks"></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Anmeldeversuche (höchstens 500)</span></div><div class="tw" id="lrows"></div></div>
+    <p class="mute" style="font-size:12px;margin-top:10px">Der Name ist das, was eingegeben wurde. Er beweist nicht, wer dahintersteckt. Passwörter und Codes werden nie gespeichert.</p>
+  </section>
+</main>
+<script>
+WB.header('protokoll');
+const { $, $$, esc, api, toast } = WB;
+const SRC = { tunnel: 'Tunnel', internet: 'Internet', heimnetz: 'Heimnetz', tailscale: 'Tailscale', '': '–' };
+const RES = { ok: 'Angemeldet', setup: 'Ersteinrichtung', 'reset-ok': 'Passwort zurückgesetzt', 'code-nötig': 'Passwort richtig, Code angefragt', passwort: 'Name oder Passwort falsch', 'code-falsch': '2FA-Code falsch',
+  gesperrt: 'Gesperrt (zu viele Fehler)', deaktiviert: 'Konto deaktiviert', abgelaufen: 'Zugang abgelaufen', tempolimit: 'Tempolimit erreicht', 'setup-blockiert': 'Ersteinrichtung blockiert', 'reset-fehler': 'Zurücksetzen fehlgeschlagen' };
+const size = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' KB' : (b / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' MB';
+const n = v => v.toLocaleString('de-DE');
+const time = t => new Date(t).toLocaleTimeString('de-DE');
+const when = t => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+const stat = (l, v, s, cls = '') => `<div class="panel stat"><div class="label">${l}</div><div class="v ${cls}">${v}</div><div class="s">${s}</div></div>`;
+const table = (head, rows, empty) => rows.length ? `<table class="t"><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>` : `<div class="empty">${empty}</div>`;
+// Nur bei Änderung neu zeichnen, damit Scrollposition und Textauswahl erhalten bleiben
+const put = (sel, html) => { const el = $(sel); if (el._h !== html) { el._h = html; el.innerHTML = html; } };
+let tab = 'traffic', day = '', seq = 0;
+
+async function traffic(mine) {
+  const d = await api(`/api/protokoll/zugriffe?tag=${day}&quelle=${$('#src').value}&fehler=${$('#errOnly').checked ? 1 : 0}`); if (mine !== seq) return;
+  const list = [...new Set([d.day, ...d.days])].sort().reverse();
+  put('#day', list.map((x, i) => `<option value="${x}">${new Date(x + 'T12:00').toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })}</option>`).join('')); $('#day').value = d.day;
+  put('#tkpi', stat('Anfragen', n(d.total), 'an diesem Tag') + stat('Datenmenge', size(d.inB + d.outB), `${size(d.inB)} empfangen · ${size(d.outB)} gesendet`)
+    + stat('Adressen', n(d.ipCount), 'verschiedene IPs') + stat('Fehler', n(d.errors), 'Status 400 und höher', d.errors ? 'bad' : ''));
+  const max = Math.max(1, ...d.hours.map(h => h.n));
+  put('#bars', d.hours.map((h, i) => `<div title="${i}–${i + 1} Uhr: ${h.n} Anfragen, davon ${h.err} Fehler"><i style="height:${h.n ? Math.max(2, h.n / max * 100) : 0}%"></i></div>`).join(''));
+  put('#axis', d.hours.map((_, i) => `<span>${i % 3 ? '' : i}</span>`).join(''));
+  put('#ips', table(['IP', 'Herkunft', 'Anfragen', 'Fehler', 'Datenmenge', 'Zuletzt'], d.ips.map(x => `<tr><td class="mono">${esc(x.ip)}</td><td>${esc(SRC[x.s] ?? x.s)}</td><td class="mono">${n(x.n)}</td><td class="mono ${x.err ? 'bad' : ''}">${n(x.err)}</td><td class="mono">${size(x.bytes)}</td><td class="mono">${time(x.last)}</td></tr>`), 'Keine Zugriffe'));
+  put('#reqs', table(['Zeit', 'IP', 'Herkunft', 'Nutzer', 'Anfrage', 'Status', 'Gesendet', 'Dauer'], d.entries.map(e => `<tr><td class="mono">${time(e.t)}</td><td class="mono">${esc(e.ip)}</td><td>${esc(SRC[e.s] ?? e.s)}</td><td>${esc(e.u || '–')}</td>
+    <td class="mono path" title="${esc(e.m + ' ' + e.p)}">${esc(e.m)} ${esc(e.p)}</td><td class="mono ${e.c >= 400 ? 'bad' : ''}">${e.c >= 400 ? '✕ ' : ''}${e.c}</td><td class="mono">${size(e.o)}</td><td class="mono">${n(e.ms)} ms</td></tr>`), 'Keine Zugriffe'));
+  $('#tnote').textContent = `Erfasst werden nur Anfragen an die Werkbank, nicht der übrige Verkehr des Servers. Aufbewahrung: ${d.keep} Tage.` + (d.cut ? ' An diesem Tag gab es sehr viele Zugriffe, ältere Einträge können fehlen.' : '');
+}
+async function logins(mine) {
+  const [d, s] = await Promise.all([api('/api/protokoll/anmeldungen?filter=' + $('#lf').value), api('/api/protokoll/sperren')]); if (mine !== seq) return;
+  const KIND = { ipacct: 'diese IP für diesen Namen', ip: 'diese IP für alle Konten', acct: 'Konto, nur für unbekannte Geräte', reset: 'Passwort zurücksetzen', jf: 'Jellyfin verbinden' };
+  put('#locks', table(['Gesperrt bis', 'IP', 'Name', 'Gilt für', 'Stufe'], s.map(x => `<tr><td class="mono bad">✕ ${when(x.until)}</td><td class="mono">${esc(x.ip || '–')}</td><td>${esc(x.name || '–')}</td><td>${esc(KIND[x.kind] || x.kind)}</td><td class="mono">${x.level}</td></tr>`), 'Gerade ist nichts gesperrt'));
+  put('#lkpi', stat('Angemeldet', n(d.sum.ok), 'in den letzten 24 Stunden', 'good') + stat('Fehlgeschlagen', n(d.sum.failed), 'in den letzten 24 Stunden', d.sum.failed ? 'bad' : '') + stat('Adressen mit Fehlern', n(d.sum.failedIps), 'verschiedene IPs, 24 Stunden'));
+  const mark = { ok: ['good', '✓'], fehler: ['bad', '✕'], offen: ['', '…'] };
+  put('#lrows', table(['Zeit', 'Eingegebener Name', 'Ergebnis', 'IP', 'Herkunft', 'Browser'], d.entries.map(e => `<tr><td class="mono">${when(e.t)}</td>
+    <td>${e.name ? esc(e.name) : '–'}${e.unbekannt ? ' <span class="chip">kein solches Konto</span>' : ''}</td>
+    <td class="${mark[e.kind][0]}">${mark[e.kind][1]} ${esc(RES[e.r] || e.r)}${e.neu ? ' <span class="chip">neues Gerät</span>' : ''}</td>
+    <td class="mono">${esc(e.ip)}</td><td>${esc(SRC[e.s] ?? e.s)}</td><td class="ua" title="${esc(e.ua)}">${esc(e.ua || '–')}</td></tr>`), 'Noch keine Anmeldeversuche'));
+}
+async function load() {
+  const mine = ++seq;
+  try { await (tab === 'traffic' ? traffic(mine) : logins(mine)); $('#upd').textContent = 'Stand ' + new Date().toLocaleTimeString('de-DE'); }
+  catch (e) { toast(e.message); }
+}
+$$('#tabs button').forEach(b => b.onclick = () => { tab = b.dataset.tab; $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); $('#traffic').classList.toggle('hide', tab !== 'traffic'); $('#logins').classList.toggle('hide', tab !== 'logins'); load(); });
+// Heute gewählt = mit dem Datum weiterlaufen, ein früherer Tag bleibt stehen
+$('#day').onchange = e => { day = e.target.selectedIndex ? e.target.value : ''; load(); };
+['#src', '#errOnly', '#lf'].forEach(s => $(s).onchange = load);
+load(); setInterval(() => { if (!document.hidden) load(); }, 10000);
+</script>
+</body></html>

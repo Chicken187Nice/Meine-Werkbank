@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Anmelden · Werkbank</title>
+<style>
+  body { display:grid; place-items:center; min-height:100vh; padding: 20px; }
+  .box { width: min(920px, 100%); display:grid; grid-template-columns: 1.1fr 1fr; border:1px solid var(--line); border-radius: 20px; overflow:hidden; background: var(--bg2); }
+  .left { padding: 40px; border-right: 1px solid var(--line); display:flex; flex-direction:column; justify-content:space-between; gap: 40px; position: relative; overflow: hidden; }
+  .left::after { content:''; position:absolute; right:-120px; bottom:-120px; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 70%); }
+  .clock { font: 700 clamp(56px, 9vw, 96px)/1 var(--f-mono); letter-spacing: -.04em; }
+  .brand { display:flex; align-items:center; gap: 10px; font: 600 15px var(--f-display); letter-spacing: .04em; }
+  .brand i { width: 26px; height: 26px; border-radius: 7px; border: 2px solid var(--acc); display: grid; place-items:center; }
+  .brand i::after { content:''; width: 8px; height: 8px; background: var(--acc); border-radius: 2px; }
+  .right { padding: 40px; }
+  .msg { font-size: 13px; padding: 10px 12px; border-radius: 9px; background: color-mix(in srgb, var(--bad) 14%, var(--bg)); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+  .msg.ok { background: color-mix(in srgb, var(--good) 14%, var(--bg)); color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
+  @media (max-width: 760px) { .box { grid-template-columns: 1fr; } .left { border-right: 0; border-bottom: 1px solid var(--line); padding: 28px; gap: 20px; } .right { padding: 28px; } }
+</style>
+</head><body>
+<div class="box fade-in">
+  <div class="left">
+    <div class="brand"><i></i>WERKBANK</div>
+    <div><div class="clock" id="clock">--:--</div><div class="mute" style="margin-top:10px" id="date"></div></div>
+    <div class="label" id="phase"></div>
+  </div>
+  <form class="right stack" id="f" autocomplete="on">
+    <div><div class="label" id="kicker">Anmelden</div><h2 style="margin-top:8px" id="title">Willkommen zurück</h2></div>
+    <div id="msg"></div>
+    <label class="field" id="nameF"><span>Nutzername</span><input id="name" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+    <label class="field" id="passF"><span>Passwort</span><input id="pass" type="password" autocomplete="current-password" required></label>
+    <label class="field hide" id="pass2F"><span>Passwort wiederholen</span><input id="pass2" type="password" autocomplete="new-password"></label>
+    <label class="field hide" id="codeF"><span id="codeL">Code aus der Authenticator-App</span><input id="code" autocomplete="one-time-code" maxlength="12" placeholder="123 456" style="font:600 22px var(--f-mono);letter-spacing:.2em;text-align:center"><small class="faint" style="font-size:12px">Handy weg? Einen deiner Wiederherstellungscodes eingeben (XXXX-XXXX).</small></label>
+    <button class="primary" id="btn" style="width:100%;padding:12px">Anmelden</button>
+    <button type="button" class="ghost sm" id="forgot" style="align-self:flex-start">Passwort vergessen?</button>
+    <p class="faint" style="font-size:12px" id="foot">Ein Login für alle Seiten. Du bleibst angemeldet, bis du dich abmeldest. An fremden Geräten bitte abmelden.</p>
+  </form>
+</div>
+<script>
+const { $, PHASE_NAME, applyTheme } = WB;
+const qs = new URLSearchParams(location.search);
+let setup = false, need2fa = false, resetMode = false;
+const next = (() => { const n = qs.get('next') || '/'; return /^\/(?!\/)/.test(n) && !n.startsWith('/login') ? n : '/'; })();
+function tick() { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); $('#phase').textContent = PHASE_NAME[applyTheme()]; }
+tick(); setInterval(tick, 5000);
+const msg = (t, ok) => $('#msg').innerHTML = t ? `<div class="msg ${ok ? 'ok' : ''}">${WB.esc(t)}</div>` : '';
+if (qs.has('bye')) msg('Du wurdest überall abgemeldet.', true);
+fetch('/api/auth/state').then(r => r.json()).then(s => { if (!s.setup) return $('#name').focus();
+  setup = true; $('#kicker').textContent = 'Ersteinrichtung'; $('#title').textContent = 'Hallo ' + s.owner + '!';
+  $('#name').value = s.owner; $('#name').readOnly = true; $('#pass2F').classList.remove('hide'); $('#pass2').required = true; $('#pass').autocomplete = 'new-password';
+  $('#btn').textContent = 'Owner-Konto anlegen'; $('#foot').textContent = 'Du wirst Owner und Admin. Nur du kannst weitere Nutzer anlegen. Mindestens 10 Zeichen, gern eine Passphrase.'; $('#pass').focus(); });
+const post = async (u, b) => { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify(b) }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Fehler'); return d; };
+$('#forgot').onclick = () => { resetMode = !resetMode; need2fa = false; msg('');
+  $('#title').textContent = resetMode ? 'Passwort zurücksetzen' : 'Willkommen zurück'; $('#kicker').textContent = resetMode ? 'Mit Zwei-Faktor-Code' : 'Anmelden';
+  $('#nameF').classList.remove('hide'); $('#passF').classList.toggle('hide', false); $('#pass2F').classList.toggle('hide', !resetMode); $('#pass2').required = resetMode;
+  $('#codeF').classList.toggle('hide', !resetMode); $('#passF').querySelector('span').textContent = resetMode ? 'Neues Passwort' : 'Passwort'; $('#pass').autocomplete = resetMode ? 'new-password' : 'current-password';
+  $('#btn').textContent = resetMode ? 'Neues Passwort setzen' : 'Anmelden'; $('#forgot').textContent = resetMode ? '← Zurück zur Anmeldung' : 'Passwort vergessen?';
+  $('#foot').textContent = resetMode ? 'Geht nur, wenn du Zwei-Faktor eingerichtet hast. Sonst setzt dir der Admin ein neues Passwort. Achtung: Alte Messenger-Nachrichten sind danach nicht mehr lesbar.' : 'Ein Login für alle Seiten. Du bleibst angemeldet, bis du dich abmeldest. An fremden Geräten bitte abmelden.'; };
+$('#f').onsubmit = async e => { e.preventDefault(); msg(''); $('#btn').disabled = true;
+  try {
+    if (resetMode) { if ($('#pass').value !== $('#pass2').value) throw new Error('Passwörter stimmen nicht überein');
+      const d = await post('/api/auth/reset', { name: $('#name').value, code: $('#code').value, pass: $('#pass').value });
+      $('#forgot').click(); $('#pass').value = ''; msg('Passwort geändert. Du kannst dich jetzt anmelden.' + (d.recoveryLeft != null && d.recoveryLeft < 3 ? ` Nur noch ${d.recoveryLeft} Wiederherstellungscodes übrig, erzeug unter Konto neue.` : ''), true); $('#btn').disabled = false; return; }
+    if (setup) { if ($('#pass').value !== $('#pass2').value) throw new Error('Passwörter stimmen nicht überein');
+      const r = await fetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ pass: $('#pass').value }) });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error); location.href = '/'; return; }
+    const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ name: $('#name').value, pass: $('#pass').value, code: need2fa ? $('#code').value : undefined }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error);
+    if (d.need2fa) { need2fa = true; $('#codeF').classList.remove('hide'); $('#nameF').classList.add('hide'); $('#passF').classList.add('hide'); $('#title').textContent = 'Zweiter Faktor'; $('#btn').textContent = 'Bestätigen'; $('#code').focus(); $('#btn').disabled = false; return; }
+    location.href = d.mustChange || d.setup2fa ? '/apps/konto' : next;
+  } catch (err) { msg(err.message); $('#btn').disabled = false; if (need2fa) { $('#code').value = ''; $('#code').focus(); } }
+};
+</script>
+</body></html>

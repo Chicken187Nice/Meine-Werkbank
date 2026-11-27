@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Heimnetz-Geräte</title>
+<style> .tw { overflow:auto; } table.t { font-size:13px; } table.t td { white-space:nowrap; vertical-align:middle; } .acts { display:flex; gap:6px; justify-content:flex-end; } </style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>Heimnetz-Geräte</h1><p>Wer ist gerade im Netz? Der Server sucht alle 5 Minuten. Neue Geräte meldet die Startseite, bis du sie als bekannt markierst.</p></div>
+    <span class="mute" id="upd" style="font-size:12px"></span>
+  </div>
+  <p class="bad" id="err" style="margin-bottom:12px"></p>
+  <div class="g3" id="kpi"></div>
+  <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Geräte</span><button class="sm" id="allKnown">Alle als bekannt markieren</button></div><div class="tw" id="rows"></div></div>
+  <p class="mute" id="note" style="font-size:12px;margin-top:10px"></p>
+</main>
+<script>
+WB.header('geraete');
+const { $, esc, api, toast, editForm } = WB;
+const when = t => t ? new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '–';
+const stat = (l, v, s, cls = '') => `<div class="panel stat"><div class="label">${l}</div><div class="v ${cls}">${v}</div><div class="s">${s}</div></div>`;
+const ipNum = ip => String(ip).split('.').reduce((n, x) => n * 256 + +x, 0);
+let D = [];
+async function load() {
+  const d = await api('/api/geraete'); D = d.devices;
+  $('#err').textContent = d.error;
+  const neu = D.filter(x => !x.known);
+  $('#kpi').innerHTML = stat('Online', D.filter(x => x.online).length, 'beim letzten Durchlauf', 'good') + stat('Unbekannt', neu.length, neu.length ? 'bitte prüfen' : 'nichts Neues', neu.length ? 'bad' : '') + stat('Gesehen', D.length, 'Geräte insgesamt');
+  $('#allKnown').classList.toggle('hide', !neu.length);
+  const rows = [...D].sort((a, b) => a.known - b.known || b.online - a.online || ipNum(a.ip) - ipNum(b.ip)).map(x => `<tr>
+    <td class="${x.online ? 'good' : 'mute'}">${x.online ? '● online' : '○ offline'}</td>
+    <td><b>${esc(x.name || x.host || 'ohne Namen')}</b>${x.self ? ' <span class="chip">dieser Server</span>' : ''}${x.router ? ' <span class="chip">Router</span>' : ''}${x.known ? '' : ' <span class="chip bad">neu</span>'}${x.name && x.host ? `<div class="mute" style="font-size:11px">${esc(x.host)}</div>` : ''}</td>
+    <td class="mono">${esc(x.ip)}</td><td class="mono">${esc(x.mac)}${x.private ? ' <span class="chip" title="Zufällige Adresse, z. B. „private WLAN-Adresse“ am Handy. Sie kann sich ändern.">privat</span>' : ''}</td>
+    <td class="mono">${when(x.first)}</td><td class="mono">${when(x.last)}</td>
+    <td><div class="acts">${x.known ? '' : `<button class="sm primary" data-ok="${esc(x.mac)}">Kenne ich</button>`}<button class="sm ghost" data-ed="${esc(x.mac)}" title="Benennen">✎</button>${x.online ? '' : `<button class="sm ghost danger" data-del="${esc(x.mac)}" title="Vergessen">✕</button>`}</div></td></tr>`);
+  $('#rows').innerHTML = rows.length ? `<table class="t"><thead><tr><th>Status</th><th>Gerät</th><th>IP</th><th>MAC-Adresse</th><th>Zuerst gesehen</th><th>Zuletzt</th><th></th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">Noch keine Daten</div>';
+  $('#note').textContent = (d.since ? `Alles, was beim ersten Durchlauf am ${when(d.since)} da war, gilt als bekannt. Prüf die Liste einmal. ` : '') + `Gesucht wird in ${d.net || 'deinem Heimnetz'}. Schlafende Geräte oder ein Gast-WLAN werden eventuell nicht gesehen.`;
+  $('#upd').textContent = d.t ? 'Stand ' + new Date(d.t).toLocaleTimeString('de-DE') : '';
+}
+const safe = () => load().catch(e => $('#err').textContent = e.message);
+const put = (mac, body) => api('/api/geraete/' + mac, { method: 'PUT', body });
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  try {
+    if (t.dataset.ok) { await put(t.dataset.ok, { known: true }); safe(); }
+    if (t.id === 'allKnown' && confirm('Alle neuen Geräte als bekannt markieren?')) { for (const x of D.filter(x => !x.known)) await put(x.mac, { known: true }); safe(); }
+    if (t.dataset.del && confirm('Gerät aus der Liste entfernen? Taucht es wieder auf, gilt es als neu.')) { await api('/api/geraete/' + t.dataset.del, { method: 'DELETE' }); safe(); }
+    if (t.dataset.ed) { const x = D.find(y => y.mac === t.dataset.ed);
+      const v = await editForm('Gerät benennen', [{ k: 'name', l: 'Name', v: x.name || x.host }, { k: 'known', l: 'Status', type: 'select', v: x.known ? '1' : '0', opts: [['1', 'bekannt'], ['0', 'unbekannt']] }]);
+      if (v && v !== 'delete') { await put(x.mac, { name: v.name, known: v.known === '1' }); safe(); } }
+  } catch (err) { toast(err.message); }
+});
+safe(); setInterval(() => { if (!document.hidden && !document.querySelector('dialog[open]')) safe(); }, 30000);
+</script>
+</body></html>

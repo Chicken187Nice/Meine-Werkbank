@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Passwort-Schmiede</title>
+<style>
+  .out { font: 600 26px/1.4 var(--f-mono); word-break: break-all; padding: 26px; text-align: center; min-height: 110px; display:grid; place-items:center; letter-spacing: .02em; }
+  .out .d { color: var(--acc); } .out .s { color: var(--warn); }
+  .meter { display:grid; grid-template-columns: repeat(5,1fr); gap: 4px; } .meter i { height: 6px; border-radius: 3px; background: var(--bg3); }
+  .hist .it { font: 13px var(--f-mono); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">14 · Werkzeug</div><h1>Passwort-Schmiede</h1><p>Wird komplett in deinem Browser mit dem kryptografischen Zufallsgenerator erzeugt. Nichts davon wird gespeichert oder an den Server geschickt.</p></div>
+    <div class="tabs" id="mode"><button class="on" data-m="pw">Passwort</button><button data-m="pp">Passphrase</button><button data-m="pin">PIN</button></div>
+  </div>
+  <div class="side">
+    <div class="panel stack" id="opts"></div>
+    <div class="stack">
+      <div class="panel out" id="out"></div>
+      <div class="row" style="justify-content:center"><button class="primary" id="copy">Kopieren</button><button id="gen">Neu erzeugen <span class="kbd">Leertaste</span></button></div>
+      <div class="panel"><div class="row between"><span class="label">Stärke</span><span class="mono" id="bits"></span></div><div class="meter" id="meter" style="margin:10px 0"></div><div class="mute" style="font-size:13px" id="crack"></div></div>
+      <div class="panel"><div class="label" style="margin-bottom:10px">Prüfen: wie stark ist ein bestehendes Passwort?</div><input id="test" type="password" placeholder="Wird nur lokal geprüft" autocomplete="off"><div class="mute" style="font-size:13px;margin-top:8px" id="testR"></div></div>
+    </div>
+  </div>
+</main>
+<script>
+WB.header('passwort');
+const { $, $$, esc, toast } = WB;
+const W = 'abend acker adler ahorn akte alpen ampel angel anker apfel arena asche atlas auge bach bahn ball banane bank bart bauer baum becher beere berg besen biene bild birne blatt blitz blume boden bogen boot brett brief brot brunnen buch burg busch dach dampf daumen decke deich delfin dorf draht drache dschungel dune eiche eimer eis elch engel ente erbse erde esel eule fabrik faden fahne falke farbe feder fels fenster ferne feuer film fisch flagge flamme flasche floh flur fluss fohlen forst frosch fuchs funke gabel garten gast geige geist gipfel glas glocke gold graben gras grotte gurke hafen hagel hammer hand harfe hase haube hecht heft held helm hemd herbst herz himmel hirsch hof honig horn hose hund hut igel insel jacke jaguar joker kabel kaffee kahn kakao kamel kamin kanal kanne kante karte katze keks kelch kerze kette kiesel kino kirsche kiste klee knopf koch koffer komet kompass krabbe kran kranz krone kugel kuh kurve lachs lager lampe land laterne laub leder leiter lerche licht linde liste loch lotse luchs magnet mais mantel marmor maske mauer meer mehl melone milch mond moos motor mowe mühle muschel nadel nebel nest netz nudel oase ofen olive onkel orgel otter paket palme panda papier pfad pfeil pferd pflanze pilot pinsel pirat planet platz pokal posten puppe quelle rabe radar rakete raum regen reh reise riese ring rinde rose rucksack sack salz sand sattel schal schiff schild schnee schwan see segel seil sessel sichel sieb silber sofa sonne spiegel spitze stadt stein stern stiefel strand strom sturm tafel tal tanne tasche tau teich teller tiger tinte tisch tonne topf turm ufer uhr ulme vogel vulkan wagen wald wal wand wasser weide welle wiese wind wolke wurzel zahn zange zebra zelt ziege zimmer zitrone zug zwerg'.split(' ');
+const rnd = n => { const a = new Uint32Array(1), lim = Math.floor(2**32 / n) * n; do crypto.getRandomValues(a); while (a[0] >= lim); return a[0] % n; };
+let mode = 'pw', o = { len: 20, up: 1, low: 1, dig: 1, sym: 1, amb: 1, words: 5, sep: '-', cap: 1, num: 1, pin: 6 }, cur = '', bits = 0;
+function opts() {
+  const sl = (k, l, a, b) => `<label class="field"><span>${l}: <b class="mono" id="v-${k}">${o[k]}</b></span><input type="range" data-o="${k}" min="${a}" max="${b}" value="${o[k]}"></label>`;
+  const ck = (k, l) => `<label class="row" style="gap:10px;cursor:pointer"><input type="checkbox" data-c="${k}" ${o[k]?'checked':''}>${l}</label>`;
+  $('#opts').innerHTML = mode === 'pw' ? `<div class="label">Optionen</div>${sl('len','Länge',8,64)}${ck('up','Großbuchstaben A–Z')}${ck('low','Kleinbuchstaben a–z')}${ck('dig','Ziffern 0–9')}${ck('sym','Sonderzeichen !#$%…')}${ck('amb','Verwechselbare weglassen (l, 1, O, 0)')}`
+    : mode === 'pp' ? `<div class="label">Optionen</div>${sl('words','Wörter',3,10)}<label class="field"><span>Trenner</span><select data-s="sep">${['-','.','_',' ','+'].map(s => `<option value="${s}" ${o.sep===s?'selected':''}>${s===' '?'Leerzeichen':s}</option>`).join('')}</select></label>${ck('cap','Wörter groß schreiben')}${ck('num','Eine Zahl anhängen')}<p class="faint" style="font-size:12px">Passphrasen sind leichter zu merken und trotzdem stark. Gut für das Master-Passwort deines Passwortmanagers.</p>`
+    : `<div class="label">Optionen</div>${sl('pin','Stellen',4,12)}<p class="faint" style="font-size:12px">PINs sind nur sicher, wenn nach wenigen Fehlversuchen gesperrt wird.</p>`;
+}
+function gen() {
+  if (mode === 'pw') { let cs = ''; if (o.up) cs += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; if (o.low) cs += 'abcdefghijklmnopqrstuvwxyz'; if (o.dig) cs += '0123456789'; if (o.sym) cs += '!#$%&*+-=?@^_~.:;'; if (o.amb) cs = cs.replace(/[lI1O0o]/g, ''); if (!cs) cs = 'abcdefghijkmnpqrstuvwxyz';
+    cur = Array.from({ length: o.len }, () => cs[rnd(cs.length)]).join(''); bits = o.len * Math.log2(cs.length); }
+  else if (mode === 'pp') { const w = Array.from({ length: o.words }, () => { const x = W[rnd(W.length)]; return o.cap ? x[0].toUpperCase() + x.slice(1) : x; }); if (o.num) w.push(String(rnd(100))); cur = w.join(o.sep); bits = o.words * Math.log2(W.length) + (o.num ? Math.log2(100) : 0); }
+  else { cur = Array.from({ length: o.pin }, () => rnd(10)).join(''); bits = o.pin * Math.log2(10); }
+  $('#out').innerHTML = `<span>${[...cur].map(c => /\d/.test(c) ? `<span class="d">${c}</span>` : /[^A-Za-zÄÖÜäöüß\s]/.test(c) && mode === 'pw' ? `<span class="s">${esc(c)}</span>` : esc(c)).join('')}</span>`;
+  meter(bits, $('#meter'), $('#crack')); $('#bits').textContent = Math.round(bits) + ' Bit Entropie';
+}
+function crackTime(b) { const s = Math.pow(2, b - 1) / 1e11; // 100 Mrd. Versuche/s (Offline-Angriff mit GPUs)
+  if (s < 1) return 'sofort'; const u = [[31536000e9,'Mrd. Jahre'],[31536000e6,'Mio. Jahre'],[31536000,'Jahre'],[86400,'Tage'],[3600,'Stunden'],[60,'Minuten'],[1,'Sekunden']];
+  for (const [d, n] of u) if (s >= d) { const v = s / d; return (v > 1e6 ? 'mehr als 1 Mio.' : Math.round(v).toLocaleString('de-DE')) + ' ' + n; } }
+function meter(b, el, txt) { const lvl = b < 40 ? 1 : b < 60 ? 2 : b < 80 ? 3 : b < 100 ? 4 : 5; const col = ['', 'var(--bad)', 'var(--warn)', 'var(--warn)', 'var(--good)', 'var(--good)'][lvl];
+  el.innerHTML = [1,2,3,4,5].map(i => `<i style="${i <= lvl ? 'background:' + col : ''}"></i>`).join('');
+  txt.textContent = `${['','Schwach','Mäßig','Gut','Stark','Sehr stark'][lvl]} · Knacken bei 100 Mrd. Versuchen pro Sekunde: im Schnitt ${crackTime(b)}`; }
+$('#opts').addEventListener('input', e => { const d = e.target.dataset; if (d.o) { o[d.o] = +e.target.value; $('#v-' + d.o).textContent = o[d.o]; } if (d.c) o[d.c] = e.target.checked ? 1 : 0; if (d.s) o[d.s] = e.target.value; gen(); });
+$('#mode').onclick = e => { const b = e.target.closest('button'); if (!b) return; mode = b.dataset.m; $$('#mode button').forEach(x => x.classList.toggle('on', x===b)); opts(); gen(); };
+$('#gen').onclick = gen;
+$('#copy').onclick = () => navigator.clipboard.writeText(cur).then(() => toast('Kopiert. Zwischenablage später leeren')).catch(() => toast('Kopieren nicht möglich'));
+document.addEventListener('keydown', e => { if (e.code === 'Space' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); gen(); } });
+$('#test').oninput = e => { const p = e.target.value; if (!p) { $('#testR').textContent = ''; return; }
+  let cs = 0; if (/[a-z]/.test(p)) cs += 26; if (/[A-Z]/.test(p)) cs += 26; if (/\d/.test(p)) cs += 10; if (/[^A-Za-z0-9]/.test(p)) cs += 20;
+  let b = p.length * Math.log2(cs || 1); const weak = /(passwort|password|123|qwert|asdf|abc|hallo|love|111|000)/i.test(p) || /(.)\1{2,}/.test(p); if (weak) b = Math.min(b, 25);
+  $('#testR').innerHTML = `ca. ${Math.round(b)} Bit · ${b < 40 ? '<span class="bad">schwach</span>' : b < 60 ? '<span class="warn">mittel</span>' : '<span class="good">stark</span>'}${weak ? ' · enthält ein bekanntes Muster' : ''} · Knackzeit im Schnitt ${crackTime(b)}`; };
+opts(); gen();
+</script>
+</body></html>

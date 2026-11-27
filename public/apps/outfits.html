@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Outfits</title>
+<style>
+  .grid { display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 18px; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+  .look { border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--bg2); display:flex; flex-direction:column; }
+  .look-h { display:flex; align-items:center; gap: 12px; padding: 16px 18px; }
+  .look-h h3 { font-size: 22px; } .look-h .sum { font: 600 13px var(--f-mono); color: var(--mute); margin-left: auto; white-space: nowrap; }
+  .badge { display:inline-flex; align-items:center; gap: 7px; padding: 4px 10px 4px 5px; border-radius: 99px; font: 600 12px var(--f-body); border: 1px solid var(--line2); }
+  .badge i { width: 16px; height: 16px; border-radius: 50%; display:inline-block; border: 1px solid #777; }
+  .bw i { background: linear-gradient(90deg, #f4f4f2 50%, #111 50%); } .br i { background: linear-gradient(90deg, #d0122f 50%, #111 50%); }
+  .fav { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 16px; }
+  .fav.on { background: #d0122f; border-color: #d0122f; color: #fff; }
+  .collage { display:grid; grid-template-columns: 1.2fr 1fr; grid-auto-rows: 1fr; gap: 3px; background: var(--line); aspect-ratio: 5 / 4; }
+  .collage a { position: relative; display:block; background: #f3f3f1; overflow: hidden; }
+  .collage a:first-child { grid-row: span 2; }
+  .collage img { width: 100%; height: 100%; object-fit: contain; display:block; transition: transform .5s var(--ease); background: #f3f3f1; }
+  .collage a:hover img { transform: scale(1.04); }
+  .collage span { position:absolute; left: 8px; bottom: 8px; font: 600 10px var(--f-mono); color: #fff; background: rgba(0,0,0,.6); padding: 2px 7px; border-radius: 5px; letter-spacing: .04em; }
+  .pieces { padding: 6px 18px 14px; }
+  .pc { display:grid; grid-template-columns: 58px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .pc:last-child { border-bottom: 0; }
+  .pc img { width: 58px; height: 58px; object-fit: contain; border-radius: 10px; background: #f3f3f1; }
+  .pc .k { font: 600 10px var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
+  .pc b { display:block; font-size: 14px; line-height: 1.3; }
+  .pc .meta { font-size: 12px; color: var(--mute); margin-top: 2px; }
+  .pc .buy { text-align: right; } .pc .pr { font: 700 14px var(--f-mono); display:block; margin-bottom: 5px; }
+  .weekbar { display:flex; gap: 14px; align-items:center; flex-wrap: wrap; margin-bottom: 16px; }
+  .weekbar .kw { font: 700 15px var(--f-mono); }
+  .skel { aspect-ratio: 5/6; border-radius: 20px; background: linear-gradient(100deg, var(--bg2) 30%, var(--bg3) 50%, var(--bg2) 70%); background-size: 300% 100%; animation: sk 1.4s infinite; }
+  @keyframes sk { to { background-position: -150% 0; } }
+  @media (max-width: 560px) { .pc { grid-template-columns: 48px 1fr; } .pc .buy { grid-column: 2; text-align: left; } .pc img { width: 48px; height: 48px; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Style</div><h1>Outfits der Woche</h1><p>Jeden Montag sechs neue Looks aus echten Produkten, oben slim und unten baggy, gemischt in Schwarz-Weiß und Schwarz-Rot. Jedes Bild ist das Originalfoto des Teils, und der Link führt genau zu diesem Produkt im Shop.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="week">Diese Woche</button><button data-t="fav">Gemerkt</button></div>
+  </div>
+  <section id="t-week">
+    <div class="weekbar"><span class="kw" id="kw"></span><span class="mute" id="next"></span><span class="grow"></span>
+      <div class="row" id="filt" style="gap:6px"><button class="chip on" data-p="">Alle</button><button class="chip" data-p="bw">Schwarz-Weiß</button><button class="chip" data-p="br">Schwarz-Rot</button></div>
+      <button class="sm hide" id="reroll">Neu zusammenstellen</button></div>
+    <div class="grid" id="grid"></div>
+    <p class="faint" style="font-size:12px;margin-top:16px">Produkte, Fotos und Preise stammen direkt aus den Shops (Asphaltgold, mnml, Pegador, Represent). Verfügbarkeit und Preise können sich ändern. Größen siehst du beim Produkt.</p>
+  </section>
+  <section id="t-fav" class="hide"><div class="grid" id="favs"></div></section>
+</main>
+<script>
+WB.header('outfits');
+const { $, $$, esc, api, Store, toast } = WB;
+let W = null, D = { favs: [] }, pf = '', me;
+const PAL = { bw: 'Schwarz-Weiß', br: 'Schwarz-Rot' };
+const money = (v, c) => (+v).toLocaleString('de-DE', { style: 'currency', currency: c || 'EUR' });
+const safe = u => /^https:\/\//.test(u) ? u : '#';
+function total(o) { const by = {}; o.pieces.forEach(p => by[p.cur] = (by[p.cur] || 0) + p.price); return Object.entries(by).map(([c, v]) => money(v, c)).join(' + '); }
+function card(o, saved) {
+  const isFav = D.favs.some(f => f.id === o.id);
+  const big = o.pieces.filter(p => p.slot !== 'acc').slice(0, 3);
+  return `<article class="look">
+    <div class="look-h"><span class="badge ${o.palette}"><i></i>${PAL[o.palette]}</span><h3>${esc(o.name)}</h3><span class="sum">${total(o)}</span>
+      <button class="fav ${isFav ? 'on' : ''}" data-fav="${esc(o.id)}" title="${isFav ? 'Nicht mehr merken' : 'Merken'}">${isFav ? '♥' : '♡'}</button></div>
+    <div class="collage">${big.map(p => `<a href="${esc(safe(p.url))}" target="_blank" rel="noopener noreferrer" title="${esc(p.title)}"><img src="${esc(safe(p.img))}" alt="${esc(p.title)}" loading="lazy" referrerpolicy="no-referrer"><span>${esc(p.kind)}</span></a>`).join('')}</div>
+    <div class="pieces">${o.pieces.map(p => `<div class="pc"><a href="${esc(safe(p.url))}" target="_blank" rel="noopener noreferrer"><img src="${esc(safe(p.img))}" alt="" loading="lazy" referrerpolicy="no-referrer"></a>
+      <div><div class="k">${esc(p.kind)}</div><b>${esc(p.title)}</b><div class="meta">${esc([p.vendor, 'bei ' + p.store].filter(Boolean).join(' · '))}${p.sizes && p.sizes.length ? ' · Größen: ' + esc(p.sizes.join(', ')) : ''}</div></div>
+      <div class="buy"><span class="pr">${money(p.price, p.cur)}</span><a class="btn sm primary" href="${esc(safe(p.url))}" target="_blank" rel="noopener noreferrer">Zum Produkt ↗</a></div></div>`).join('')}</div>
+    ${saved ? `<div class="faint" style="font-size:11px;padding:0 18px 12px">Gemerkt am ${new Date(saved).toLocaleDateString('de-DE')}</div>` : ''}</article>`;
+}
+function render() {
+  if (!W || (W.building && !W.outfits)) { $('#grid').innerHTML = Array(4).fill('<div class="skel"></div>').join(''); $('#kw').textContent = 'Looks werden aus den Shops zusammengestellt …'; $('#next').textContent = 'dauert etwa 20–40 Sekunden'; return; }
+  const now = new Date(), nm = new Date(now); nm.setDate(now.getDate() + ((8 - now.getDay()) % 7 || 7));
+  $('#kw').textContent = 'KW ' + W.week.split('-W')[1]; $('#next').textContent = `Neue Looks am Montag, ${nm.toLocaleDateString('de-DE', { day: '2-digit', month: 'long' })}`;
+  $('#reroll').classList.toggle('hide', !me?.admin);
+  const l = W.outfits.filter(o => !pf || o.palette === pf);
+  if (W.outfits.length) $('#grid').innerHTML = l.map(o => card(o)).join('');
+  else { const st = W.status || {}; $('#grid').innerHTML = `<div class="panel" style="grid-column:1/-1"><h3>Noch keine Looks</h3><p class="mute" style="margin-top:8px">${esc(st.error || 'Die Shops konnten nicht geladen werden.')} Der Server versucht es automatisch alle 30 Minuten erneut.</p>
+      <div class="list" style="margin-top:10px">${Object.entries(st.stores || {}).map(([k, v]) => `<div class="it"><span class="grow">${esc(k)}</span><span class="${v.ok ? 'good' : 'bad'}">${v.ok ? v.items + ' passende Produkte' : esc(v.error)}</span></div>`).join('')}</div></div>`; }
+}
+function favs() { $('#favs').innerHTML = D.favs.length ? D.favs.slice().reverse().map(f => card(f.o, f.at)).join('') : '<div class="empty" style="grid-column:1/-1">Noch nichts gemerkt. Tipp auf ♡ bei einem Look.</div>'; }
+let pt; async function poll() { clearTimeout(pt); try { const r = await fetch('/api/outfits', { headers: { 'X-WB': '1' } }); W = await r.json(); } catch {} render(); if (!W || W.building) pt = setTimeout(poll, 4000); }
+$('#reroll').onclick = async () => { await api('/api/outfits/refresh', { method: 'POST' }); W = { building: true }; render(); setTimeout(poll, 3000); };
+document.addEventListener('click', e => {
+  const f = e.target.closest('[data-fav]'); if (f) { const id = f.dataset.fav;
+    if (D.favs.some(x => x.id === id)) D.favs = D.favs.filter(x => x.id !== id);
+    else { const o = W?.outfits?.find(x => x.id === id); if (o) D.favs.push({ id, at: Date.now(), o }); }
+    Store.set('outfits', D); render(); favs(); }
+  const p = e.target.closest('[data-p]'); if (p) { pf = p.dataset.p; $$('#filt .chip').forEach(x => x.classList.toggle('on', x === p)); render(); } });
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); ['week','fav'].forEach(t => $('#t-' + t).classList.toggle('hide', t !== b.dataset.t)); favs(); };
+(async () => { me = await WB.me(); D = Object.assign(D, await Store.get('outfits', D)); D.favs = (D.favs || []).filter(f => f && f.o && f.o.pieces && f.o.pieces[0] && f.o.pieces[0].url); render(); poll(); })();
+</script>
+</body></html>

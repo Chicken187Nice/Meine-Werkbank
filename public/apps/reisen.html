@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Reiseplaner</title>
+<style>
+  .trip { width:100%; text-align:left; justify-content:flex-start; flex-direction:column; align-items:flex-start; gap:3px; padding:12px 14px; white-space:normal; }
+  .trip.on { border-color: var(--acc); box-shadow: inset 3px 0 0 var(--acc); }
+  .dayc { border:1px solid var(--line); border-radius: var(--r-sm); padding: 12px; background: var(--bg); }
+  .dayc + .dayc { margin-top: 8px; }
+  .stop { display:grid; grid-template-columns: 70px 1fr 28px; gap:6px; margin-top:6px; }
+  .stop input { padding:6px 8px; font-size:13px; }
+  .pack .it label { display:flex; gap:10px; flex:1; cursor:pointer; align-items:center; }
+  .pack .it.done span { text-decoration: line-through; color: var(--faint); }
+  .count { font: 700 46px/1 var(--f-mono); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">11 · Werkzeug</div><h1>Reiseplaner</h1><p>Eine Reise, eine Übersicht: Programm für jeden Tag, eine Packliste, die zur Reiseart passt, und das Budget mit Live-Stand.</p></div>
+    <button class="primary" id="newTrip">+ Neue Reise</button>
+  </div>
+  <div class="side">
+    <div class="stack"><div class="panel"><div class="label" style="margin-bottom:10px">Reisen</div><div class="stack" id="trips"></div></div></div>
+    <div id="detail"></div>
+  </div>
+</main>
+<dialog id="dlg"><form method="dialog" class="stack" id="f">
+  <h3>Neue Reise</h3>
+  <label class="field"><span>Ziel</span><input name="dest" required placeholder="z. B. Lissabon"></label>
+  <div class="fields"><label class="field"><span>Von</span><input type="date" name="from" required></label><label class="field"><span>Bis</span><input type="date" name="to" required></label></div>
+  <div class="fields"><label class="field"><span>Art</span><select name="kind"><option value="stadt">Städtetrip</option><option value="strand">Strand</option><option value="berge">Berge / Wandern</option><option value="winter">Winter / Ski</option><option value="festival">Festival</option><option value="business">Geschäftlich</option></select></label>
+  <label class="field"><span>Budget (€)</span><input name="budget" inputmode="decimal" value="800"></label></div>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Anlegen</button></div>
+</form></dialog>
+<script>
+WB.header('reisen');
+const { $, $$, esc, uid, eur, pf, today, ymd, parseYmd, fmtDate, daysBetween, Store, toast } = WB;
+let D = { trips: [], sel: null };
+const save = () => Store.set('reisen', D);
+const PACK = {
+  basis: ['Ausweis / Reisepass','Krankenversicherungskarte','Ladekabel','Powerbank','Kopfhörer','Zahnbürste & Zahnpasta','Deo','Medikamente','Unterwäsche','Socken','Schlafsachen','Bargeld / Karte','Tickets / Buchungen offline speichern'],
+  stadt: ['Bequeme Sneaker','Leichte Jacke','Kleiner Rucksack','Regenschirm','Adapter (falls nötig)'],
+  strand: ['Badehose / Bikini','Sonnencreme LSF 50','Sonnenbrille','Handtuch','Flip-Flops','After-Sun','Cap'],
+  berge: ['Wanderschuhe','Regenjacke','Funktionsshirts','Trinkflasche','Blasenpflaster','Stirnlampe','Offline-Karten'],
+  winter: ['Skijacke & -hose','Thermo-Unterwäsche','Handschuhe','Mütze','Skibrille','Lippenpflege','Wärmepads'],
+  festival: ['Zelt','Isomatte','Schlafsack','Gummistiefel','Gehörschutz','Panzertape','Müllbeutel','Bauchtasche'],
+  business: ['Hemd / Bluse','Laptop & Netzteil','Visitenkarten','Notizblock','Schuhe (formell)']
+};
+const KIND = { stadt:'Städtetrip', strand:'Strand', berge:'Berge', winter:'Winter', festival:'Festival', business:'Geschäftlich' };
+const cur = () => D.trips.find(t => t.id === D.sel);
+
+function renderTrips() {
+  const list = [...D.trips].sort((a,b) => a.from.localeCompare(b.from));
+  $('#trips').innerHTML = list.length ? list.map(t => { const d = daysBetween(today(), t.from);
+    return `<button class="trip ${t.id===D.sel?'on':''}" data-trip="${t.id}"><b>${esc(t.dest)}</b><span class="mute" style="font-size:12px">${fmtDate(t.from,{day:'2-digit',month:'short'})} – ${fmtDate(t.to,{day:'2-digit',month:'short',year:'numeric'})} · ${d > 0 ? 'in ' + d + ' Tagen' : d >= -daysBetween(t.from,t.to) ? 'läuft gerade' : 'vorbei'}</span></button>`; }).join('')
+    : '<div class="empty">Noch keine Reise geplant</div>';
+}
+function render() {
+  renderTrips(); const t = cur();
+  if (!t) { $('#detail').innerHTML = '<div class="panel empty" style="padding:80px 20px">Wähl links eine Reise oder leg eine neue an.</div>'; return; }
+  const nDays = daysBetween(t.from, t.to) + 1, until = daysBetween(today(), t.from);
+  while (t.days.length < nDays) t.days.push({ stops: [] }); t.days.length = nDays;
+  const spent = t.exp.reduce((s,e) => s + e.a, 0), packed = t.pack.filter(p => p.d).length;
+  $('#detail').innerHTML = `<div class="stack">
+    <div class="panel"><div class="row between"><div><div class="label">${KIND[t.kind]}</div><h2 style="font-size:30px;margin-top:6px">${esc(t.dest)}</h2><div class="mute">${fmtDate(t.from)} – ${fmtDate(t.to)} · ${nDays} Tage</div></div>
+      <div style="text-align:right"><div class="count acc">${until > 0 ? until : '✓'}</div><div class="mute" style="font-size:12px">${until > 0 ? 'Tage bis zur Abreise' : 'unterwegs oder vorbei'}</div></div></div>
+      <div class="g3" style="margin-top:16px"><div class="stat"><div class="label">Budget</div><div class="v" style="font-size:20px">${eur(t.budget,0)}</div></div>
+        <div class="stat"><div class="label">Ausgegeben</div><div class="v ${spent>t.budget?'bad':''}" style="font-size:20px">${eur(spent,0)}</div><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100,spent/t.budget*100||0)}%;${spent>t.budget?'background:var(--bad)':''}"></i></div></div>
+        <div class="stat"><div class="label">Pro Tag übrig</div><div class="v" style="font-size:20px">${eur((t.budget-spent)/nDays,0)}</div></div></div></div>
+    <div class="g2" style="align-items:start">
+      <div class="panel"><div class="panel-h"><span class="label">Tagesplan</span></div>${t.days.map((d,i) => { const dt = new Date(parseYmd(t.from)); dt.setDate(dt.getDate()+i);
+        return `<div class="dayc"><div class="row between"><b>Tag ${i+1}</b><span class="mute" style="font-size:12px">${dt.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'2-digit'})}</span></div>
+        ${d.stops.map((s,j) => `<div class="stop"><input data-st="${i}:${j}:time" value="${esc(s.time)}" placeholder="09:00" class="mono"><input data-st="${i}:${j}:name" value="${esc(s.name)}" placeholder="Was / wo?"><button class="ghost sm" data-rmst="${i}:${j}">✕</button></div>`).join('')}
+        <button class="sm ghost" data-addst="${i}" style="margin-top:6px">+ Programmpunkt</button></div>`; }).join('')}</div>
+      <div class="stack">
+        <div class="panel pack"><div class="panel-h"><span class="label">Packliste · ${packed}/${t.pack.length}</span><button class="sm ghost" id="unpack">alle zurücksetzen</button></div>
+          <div class="bar" style="margin-bottom:10px"><i style="width:${t.pack.length?packed/t.pack.length*100:0}%"></i></div>
+          <div class="list scroll" style="max-height:380px">${t.pack.map((p,i) => `<div class="it ${p.d?'done':''}"><label><input type="checkbox" data-pk="${i}" ${p.d?'checked':''}><span>${esc(p.n)}</span></label><button class="ghost sm" data-rmpk="${i}">✕</button></div>`).join('')}</div>
+          <form class="row" id="pkF" style="flex-wrap:nowrap;margin-top:8px"><input id="pkIn" placeholder="Weiteres …"><button>+</button></form></div>
+        <div class="panel"><div class="panel-h"><span class="label">Ausgaben</span></div>
+          <form class="row" id="exF" style="flex-wrap:nowrap"><input id="exN" placeholder="Hotel, Essen …"><input id="exA" placeholder="€" style="width:90px" inputmode="decimal"><button>+</button></form>
+          <div class="list" style="margin-top:8px">${t.exp.map((e,i) => `<div class="it"><span class="grow">${esc(e.n)}</span><span class="mono">${eur(e.a)}</span><button class="ghost sm" data-edex="${i}" title="Bearbeiten">✎</button><button class="ghost sm" data-rmex="${i}">✕</button></div>`).join('') || '<div class="faint" style="font-size:13px;padding:8px 0">Noch nichts</div>'}</div></div>
+        <div class="row"><button id="edTrip">Reise bearbeiten</button><button class="ghost danger" id="delTrip">Reise löschen</button></div>
+      </div></div></div>`;
+  $('#pkF').onsubmit = e => { e.preventDefault(); const v = $('#pkIn').value.trim(); if (v) { t.pack.push({ n: v, d: false }); save(); render(); } };
+  $('#exF').onsubmit = e => { e.preventDefault(); const a = pf($('#exA').value); if (a) { t.exp.push({ n: $('#exN').value.trim() || 'Ausgabe', a }); save(); render(); } };
+  $('#unpack').onclick = () => { t.pack.forEach(p => p.d = false); save(); render(); };
+  $('#edTrip').onclick = () => WB.editForm('Reise bearbeiten', [{ k: 'dest', l: 'Ziel', v: t.dest, req: true }, { k: 'from', l: 'Von', type: 'date', v: t.from, req: true }, { k: 'to', l: 'Bis', type: 'date', v: t.to, req: true },
+    { k: 'kind', l: 'Art', type: 'select', v: t.kind, opts: Object.entries(KIND) }, { k: 'budget', l: 'Budget (€)', type: 'number', v: t.budget }]).then(v => { if (!v || v === 'delete') return;
+      if (v.to < v.from) return toast('Enddatum liegt vor dem Start'); if (daysBetween(v.from, v.to) > 60) return toast('Maximal 60 Tage'); Object.assign(t, v); save(); render(); });
+  $('#delTrip').onclick = () => { if (confirm('Reise löschen?')) { D.trips = D.trips.filter(x => x !== t); D.sel = D.trips[0]?.id || null; save(); render(); } };
+}
+document.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const d = b.dataset, t = cur();
+  if (d.trip) { D.sel = d.trip; save(); render(); }
+  if (d.addst) { t.days[d.addst].stops.push({ time: '', name: '' }); save(); render(); }
+  if (d.rmst) { const [i,j] = d.rmst.split(':'); t.days[i].stops.splice(j,1); save(); render(); }
+  if (d.rmpk) { t.pack.splice(d.rmpk,1); save(); render(); }
+  if (d.edex) { const x = t.exp[+d.edex]; WB.editForm('Ausgabe bearbeiten', [{ k: 'n', l: 'Wofür', v: x.n, req: true }, { k: 'a', l: 'Betrag (€)', type: 'number', v: x.a }]).then(v => { if (v && v !== 'delete') { Object.assign(x, v); save(); render(); } }); }
+  if (d.rmex) { t.exp.splice(d.rmex,1); save(); render(); } });
+document.addEventListener('change', e => { const t = cur(); if (!t) return;
+  if (e.target.dataset.st) { const [i,j,k] = e.target.dataset.st.split(':'); t.days[i].stops[j][k] = e.target.value; save(); }
+  if (e.target.dataset.pk !== undefined) { t.pack[e.target.dataset.pk].d = e.target.checked; save(); render(); } });
+$('#newTrip').onclick = () => { const f = $('#f'); f.reset(); const d = new Date(); d.setDate(d.getDate()+30); f.from.value = ymd(d); d.setDate(d.getDate()+4); f.to.value = ymd(d); $('#dlg').showModal(); };
+$('#dlg').addEventListener('close', () => { if ($('#dlg').returnValue !== 'ok') return; const f = $('#f');
+  if (f.to.value < f.from.value) return toast('Enddatum liegt vor dem Start');
+  const t = { id: uid(), dest: f.dest.value.trim(), from: f.from.value, to: f.to.value, kind: f.kind.value, budget: pf(f.budget.value) || 0, days: [], exp: [],
+    pack: [...PACK.basis, ...PACK[f.kind.value]].map(n => ({ n, d: false })) };
+  if (daysBetween(t.from, t.to) > 60) return toast('Maximal 60 Tage');
+  D.trips.push(t); D.sel = t.id; save(); render(); });
+(async () => { D = Object.assign(D, await Store.get('reisen', D)); if (!D.sel && D.trips[0]) D.sel = D.trips[0].id; render(); })();
+</script>
+</body></html>

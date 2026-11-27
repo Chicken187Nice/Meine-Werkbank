@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Rechner</title>
+<style>
+  .sl { display:grid; grid-template-columns: 1fr 120px; gap: 4px 12px; align-items:center; margin-bottom: 12px; }
+  .sl span { font-size: 13px; color: var(--mute); grid-column: 1 / -1; }
+  .sl input[type=text] { text-align: right; font-family: var(--f-mono); padding: 6px 9px; }
+  .big { font: 700 40px/1 var(--f-mono); letter-spacing: -.02em; }
+  canvas { width: 100%; display: block; }
+  .dev { display:grid; grid-template-columns: 1.6fr .8fr .8fr .8fr 1fr 32px; gap: 6px; align-items:center; margin-bottom: 6px; }
+  .dev input { padding: 7px 8px; font-size: 13px; }
+  @media (max-width:640px){ .dev { grid-template-columns: 1fr 1fr 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">10 · Werkzeug</div><h1>Rechner</h1><p>Schieberegler bewegen, das Ergebnis rechnet sofort mit. Alle Werte sind vereinfachte Modelle zur Orientierung und keine Finanzberatung.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="kredit">Kredit</button><button data-t="strom">Stromkosten</button><button data-t="spar">Sparplan</button><button data-t="miete">Kaufen oder Mieten</button></div>
+  </div>
+
+  <section id="t-kredit" class="side">
+    <div class="panel" id="kIn"></div>
+    <div class="stack"><div class="g3">
+      <div class="panel stat"><div class="label">Monatliche Rate</div><div class="big acc" id="kRate"></div></div>
+      <div class="panel stat"><div class="label">Zinsen gesamt</div><div class="v" id="kZins"></div><div class="s" id="kZinsP"></div></div>
+      <div class="panel stat"><div class="label">Zurückgezahlt</div><div class="v" id="kTot"></div></div></div>
+      <div class="panel"><div class="label" style="margin-bottom:10px">Restschuld & Zinsanteil pro Jahr</div><canvas id="kChart" height="220"></canvas></div>
+      <div class="panel scroll" style="max-height:300px"><table class="t" id="kTab"></table></div></div>
+  </section>
+
+  <section id="t-strom" class="hide stack">
+    <div class="panel"><div class="panel-h"><span class="label">Geräte</span><div class="row"><span class="mute" style="font-size:13px">Strompreis</span><input id="ct" value="34" style="width:70px;text-align:right" class="mono"><span class="mute" style="font-size:13px">ct/kWh</span><button class="sm" id="addDev">+ Gerät</button></div></div>
+      <div class="dev label" style="margin-bottom:8px"><span>Gerät</span><span>Watt</span><span>Std/Tag</span><span>Tage/Wo</span><span style="text-align:right">€ / Jahr</span><span></span></div>
+      <div id="devs"></div></div>
+    <div class="g3"><div class="panel stat"><div class="label">Pro Jahr</div><div class="big acc" id="sYear"></div></div>
+      <div class="panel stat"><div class="label">Pro Monat</div><div class="v" id="sMonth"></div></div>
+      <div class="panel stat"><div class="label">Verbrauch</div><div class="v" id="sKwh"></div><div class="s">kWh pro Jahr</div></div></div>
+    <p class="faint" style="font-size:12px">Leistung steht meist auf dem Typenschild oder Netzteil. Für Dauerläufer wie den Kühlschrank: Jahresverbrauch vom Energielabel ÷ 8760 = Watt bei 24 h.</p>
+  </section>
+
+  <section id="t-spar" class="hide side">
+    <div class="panel" id="sIn"></div>
+    <div class="stack"><div class="g3">
+      <div class="panel stat"><div class="label">Endwert</div><div class="big acc" id="spEnd"></div></div>
+      <div class="panel stat"><div class="label">Selbst eingezahlt</div><div class="v" id="spIn"></div></div>
+      <div class="panel stat"><div class="label">Zinseszins</div><div class="v good" id="spGain"></div><div class="s" id="spGainP"></div></div></div>
+      <div class="panel"><div class="row" style="gap:16px;margin-bottom:10px;font-size:12px"><span class="label">Vermögen pro Jahr</span><span class="grow"></span><span class="row" style="gap:6px"><span class="dot" style="background:var(--line2)"></span>eingezahlt</span><span class="row" style="gap:6px"><span class="dot"></span>Erträge</span></div><canvas id="spChart" height="260"></canvas></div></div>
+  </section>
+
+  <section id="t-miete" class="hide side">
+    <div class="panel" id="mIn"></div>
+    <div class="stack"><div class="g2">
+      <div class="panel stat"><div class="label">Vermögen Käufer nach <span class="hz"></span> J.</div><div class="big" id="mBuy"></div><div class="s" id="mBuyS"></div></div>
+      <div class="panel stat"><div class="label">Vermögen Mieter nach <span class="hz"></span> J.</div><div class="big" id="mRent"></div><div class="s" id="mRentS"></div></div></div>
+      <div class="panel"><div class="row" style="gap:16px;margin-bottom:10px;font-size:12px"><span class="label">Vermögensverlauf</span><span class="grow"></span><span class="row" style="gap:6px"><span class="dot"></span>Kaufen</span><span class="row" style="gap:6px"><span class="dot" style="background:var(--good)"></span>Mieten + anlegen</span></div><canvas id="mChart" height="260"></canvas></div>
+      <div class="panel mute" style="font-size:13px" id="mNote"></div></div>
+  </section>
+</main>
+<script>
+WB.header('rechner');
+const { $, $$, esc, eur, num, pf, uid, Store } = WB;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let D = { k: {}, s: {}, m: {}, devs: null, ct: 34 };
+const save = WB.debounce(() => Store.set('rechner', D), 400);
+let tab = 'kredit';
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; tab = b.dataset.t; $$('#tabs button').forEach(x => x.classList.toggle('on', x===b)); ['kredit','strom','spar','miete'].forEach(t => $('#t-'+t).classList.toggle('hide', t !== tab)); calcAll(); };
+
+// Slider-Bausteine
+function sliders(box, store, defs, cb) {
+  box.innerHTML = defs.map(([k, label, min, max, step, def, unit]) => { const v = store[k] ?? def; store[k] = v;
+    return `<div class="sl"><span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}" value="${v}"><input type="text" data-t="${k}" value="${num(v, step < 1 ? 1 : 0)}${unit ? ' ' + unit : ''}"></div>`; }).join('');
+  box.addEventListener('input', e => { const k = e.target.dataset.k || e.target.dataset.t; if (!k) return;
+    const v = e.target.type === 'range' ? +e.target.value : pf(e.target.value); store[k] = v;
+    const def = defs.find(d => d[0] === k);
+    if (e.target.type === 'range') box.querySelector(`[data-t="${k}"]`).value = num(v, def[4] < 1 ? 1 : 0) + (def[6] ? ' ' + def[6] : '');
+    else box.querySelector(`[data-k="${k}"]`).value = v;
+    save(); cb(); });
+}
+function chart(cv, series, opts = {}) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = +cv.getAttribute('height'); cv.width = w*dpr; cv.height = h*dpr; cv.style.height = h + 'px';
+  const x = cv.getContext('2d'); x.scale(dpr, dpr); x.clearRect(0,0,w,h);
+  const padL = 64, padB = 24, pw = w - padL - 8, ph = h - padB - 8; const n = series[0].data.length;
+  const all = opts.stack ? series[0].data.map((_, i) => series.reduce((s, se) => s + se.data[i], 0)) : series.flatMap(s => s.data);
+  const max = Math.max(1, ...all), min = Math.min(0, ...all);
+  x.strokeStyle = css('--line'); x.fillStyle = css('--mute'); x.font = '11px Cascadia Mono, monospace'; x.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) { const v = min + (max - min) * i / 4, y = 8 + ph - (v - min) / (max - min) * ph; x.beginPath(); x.moveTo(padL, y); x.lineTo(w - 8, y); x.stroke(); x.fillText(Math.abs(v) >= 1e6 ? num(v/1e6,1)+' Mio' : Math.abs(v) >= 1000 ? num(v/1000,0)+' T' : num(v,0), padL - 8, y + 4); }
+  const Y = v => 8 + ph - (v - min) / (max - min) * ph;
+  x.textAlign = 'center'; const every = Math.ceil(n / 12);
+  for (let i = 0; i < n; i++) if (i % every === 0 || i === n-1) x.fillText(opts.labels ? opts.labels[i] : i + 1, padL + (i + .5) * pw / n, h - 6);
+  if (opts.type === 'line') { series.forEach(s => { x.strokeStyle = s.color; x.lineWidth = 2.5; x.beginPath(); s.data.forEach((v, i) => { const px = padL + (i + .5) * pw / n; i ? x.lineTo(px, Y(v)) : x.moveTo(px, Y(v)); }); x.stroke(); }); }
+  else { const bw = Math.max(2, pw / n * .62); for (let i = 0; i < n; i++) { let acc = 0; series.forEach(s => { const v = s.data[i]; x.fillStyle = s.color; const y0 = Y(acc), y1 = Y(acc + v); x.fillRect(padL + (i + .5) * pw / n - bw/2, y1, bw, y0 - y1); if (opts.stack) acc += v; }); } }
+}
+
+// Kredit
+function calcK() { const k = D.k, P = k.amt, r = k.rate/100/12, n = k.years*12; const rate = r ? P*r/(1-Math.pow(1+r,-n)) : P/n;
+  $('#kRate').textContent = eur(rate); const tot = rate*n; $('#kZins').textContent = eur(tot-P,0); $('#kZinsP').textContent = num((tot-P)/P*100,0) + ' % vom Kreditbetrag'; $('#kTot').textContent = eur(tot,0);
+  let rest = P; const rows = [], restA = [], zinsA = [];
+  for (let y = 1; y <= k.years; y++) { let z = 0, t = 0; for (let m = 0; m < 12; m++) { const zi = rest*r; z += zi; t += rate - zi; rest -= rate - zi; } rest = Math.max(0, rest); rows.push([y, z, t, rest]); restA.push(rest); zinsA.push(z); }
+  $('#kTab').innerHTML = '<tr><th>Jahr</th><th class="r">Zinsen</th><th class="r">Tilgung</th><th class="r">Restschuld</th></tr>' + rows.map(r => `<tr><td class="mono">${r[0]}</td><td class="r mono">${eur(r[1],0)}</td><td class="r mono">${eur(r[2],0)}</td><td class="r mono">${eur(r[3],0)}</td></tr>`).join('');
+  chart($('#kChart'), [{ data: restA, color: css('--acc') }]); }
+
+// Strom
+const DEV0 = [['Gaming-PC', 350, 3, 7], ['Monitor', 30, 5, 7], ['Kühlschrank', 17, 24, 7], ['WLAN-Router', 10, 24, 7], ['Fernseher', 90, 3, 7], ['Waschmaschine (Ø)', 800, 1, 3], ['Standby gesamt', 15, 24, 7]];
+function calcS() { D.ct = pf($('#ct').value); let tot = 0, kwh = 0;
+  $('#devs').innerHTML = D.devs.map(d => { const k = d.w * d.h * d.d * 52 / 1000; const c = k * D.ct / 100; tot += c; kwh += k;
+    return `<div class="dev"><input data-f="n" data-id="${d.id}" value="${esc(d.n)}"><input data-f="w" data-id="${d.id}" value="${d.w}" class="mono"><input data-f="h" data-id="${d.id}" value="${num(d.h,1)}" class="mono"><input data-f="d" data-id="${d.id}" value="${d.d}" class="mono"><span class="mono" style="text-align:right">${eur(c,0)}</span><button class="ghost sm danger" data-del="${d.id}">✕</button></div>`; }).join('');
+  $('#sYear').textContent = eur(tot,0); $('#sMonth').textContent = eur(tot/12); $('#sKwh').textContent = num(kwh,0); }
+$('#devs').addEventListener('change', e => { const d = D.devs.find(x => x.id === e.target.dataset.id); if (!d) return; const f = e.target.dataset.f; d[f] = f === 'n' ? e.target.value : pf(e.target.value); save(); calcS(); });
+$('#devs').addEventListener('click', e => { const b = e.target.closest('[data-del]'); if (b) { D.devs = D.devs.filter(x => x.id !== b.dataset.del); save(); calcS(); } });
+$('#addDev').onclick = () => { D.devs.push({ id: uid(), n: 'Neues Gerät', w: 50, h: 2, d: 7 }); save(); calcS(); };
+$('#ct').onchange = () => { save(); calcS(); };
+
+// Sparplan
+function calcSp() { const s = D.s; let v = s.start, inv = s.start, monthly = s.monthly; const a = [], b = [], r = Math.pow(1 + s.rate/100, 1/12) - 1;
+  for (let y = 1; y <= s.years; y++) { for (let m = 0; m < 12; m++) { v = v*(1+r) + monthly; inv += monthly; } a.push(inv); b.push(Math.max(0, v - inv)); monthly *= 1 + s.dyn/100; }
+  $('#spEnd').textContent = eur(v,0); $('#spIn').textContent = eur(inv,0); $('#spGain').textContent = eur(v-inv,0); $('#spGainP').textContent = num((v-inv)/v*100,0) + ' % des Endwerts sind Erträge';
+  chart($('#spChart'), [{ data: a, color: css('--line2') }, { data: b, color: css('--acc') }], { stack: true }); }
+
+// Kaufen vs Mieten
+function calcM() { const m = D.m, nk = m.price * m.nk/100, loan = Math.max(0, m.price + nk - m.ek), r = m.zins/100/12, n = 30*12;
+  const rate = loan ? (r ? loan*r/(1-Math.pow(1+r,-n)) : loan/n) : 0; const g = Math.pow(1 + m.etf/100, 1/12) - 1;
+  let rest = loan, house = m.price, rent = m.rent, buyPf = Math.max(0, m.ek - m.price - nk), rentPf = m.ek; const B = [], Rr = [];
+  for (let y = 1; y <= m.hz; y++) { for (let i = 0; i < 12; i++) { const zi = rest*r; const pay = rest > 0 ? Math.min(rate, rest + zi) : 0; rest = Math.max(0, rest + zi - pay);
+      const buyCost = pay + m.price*m.inst/100/12; const diff = buyCost - rent; buyPf *= 1+g; rentPf *= 1+g; if (diff > 0) rentPf += diff; else buyPf -= diff; }
+    house *= 1 + m.wert/100; rent *= 1 + m.mstg/100; B.push(house - rest + buyPf); Rr.push(rentPf); }
+  $$('.hz').forEach(x => x.textContent = m.hz);
+  const bw = B.at(-1), rw = Rr.at(-1); $('#mBuy').textContent = eur(bw,0); $('#mRent').textContent = eur(rw,0);
+  $('#mBuy').className = 'big ' + (bw >= rw ? 'acc' : ''); $('#mRent').className = 'big ' + (rw > bw ? 'good' : '');
+  $('#mBuyS').textContent = `Kreditrate ${eur(rate,0)}/Monat · Kaufnebenkosten ${eur(nk,0)}`; $('#mRentS').textContent = `Startmiete ${eur(m.rent,0)} · Differenz wird mit ${num(m.etf,1)} % angelegt`;
+  $('#mNote').innerHTML = `Modell: Annuitätendarlehen über 30 Jahre. Wer monatlich weniger zahlt, legt die Differenz an. Der Mieter legt das Eigenkapital zu Beginn an. Kaufnebenkosten in Bayern: Grunderwerbsteuer 3,5 % + Notar/Grundbuch ca. 2 % + ggf. Makler ca. 3,57 %. <b style="color:var(--text)">${bw >= rw ? 'Kaufen' : 'Mieten'}</b> liegt in diesem Szenario um ${eur(Math.abs(bw-rw),0)} vorne. Ändere Wertsteigerung und Rendite – genau dort entscheidet es sich meistens.`;
+  chart($('#mChart'), [{ data: B, color: css('--acc') }, { data: Rr, color: css('--good') }], { type: 'line' }); }
+
+function calcAll() { if (tab === 'kredit') calcK(); if (tab === 'strom') calcS(); if (tab === 'spar') calcSp(); if (tab === 'miete') calcM(); }
+window.addEventListener('resize', WB.debounce(calcAll, 150)); document.addEventListener('wb-theme', calcAll);
+(async () => {
+  D = Object.assign(D, await Store.get('rechner', D)); $('#ct').value = D.ct;
+  if (!D.devs) D.devs = DEV0.map(([n,w,h,d]) => ({ id: uid(), n, w, h, d }));
+  sliders($('#kIn'), D.k, [['amt','Kreditbetrag',1000,500000,1000,20000,'€'],['rate','Sollzins p. a.',0,15,.1,6.5,'%'],['years','Laufzeit',1,35,1,5,'J.']], calcK);
+  sliders($('#sIn'), D.s, [['start','Startbetrag',0,100000,500,1000,'€'],['monthly','Monatliche Rate',0,3000,10,100,'€'],['rate','Rendite p. a.',0,12,.1,6,'%'],['years','Dauer',1,50,1,30,'J.'],['dyn','Jährliche Erhöhung der Rate',0,10,.5,0,'%']], calcSp);
+  sliders($('#mIn'), D.m, [['price','Kaufpreis',50000,1500000,5000,400000,'€'],['ek','Eigenkapital',0,600000,5000,80000,'€'],['nk','Kaufnebenkosten',0,15,.1,9.1,'%'],['zins','Bauzins',0,10,.05,3.6,'%'],['inst','Instandhaltung p. a.',0,3,.1,1,'%'],['wert','Wertsteigerung p. a.',-2,6,.1,1.5,'%'],['rent','Kaltmiete vergleichbar',200,5000,10,1300,'€'],['mstg','Mietsteigerung p. a.',0,6,.1,2,'%'],['etf','Rendite Geldanlage p. a.',0,12,.1,5,'%'],['hz','Betrachtungszeitraum',1,40,1,25,'J.']], calcM);
+  calcAll();
+})();
+</script>
+</body></html>

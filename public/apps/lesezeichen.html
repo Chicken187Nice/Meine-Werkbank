@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Lesezeichen</title>
+<style>
+  .grp { margin-bottom: 22px; }
+  .grp h3 { font-size: 14px; color: var(--mute); margin-bottom: 10px; display:flex; gap: 10px; align-items:center; }
+  .grp h3::after { content:''; flex:1; height:1px; background: var(--line); }
+  .links { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .lk { position: relative; display:flex; align-items:center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); text-decoration:none; color: var(--text); transition: border-color .15s, transform .15s; }
+  .lk:hover { border-color: var(--acc); transform: translateY(-1px); }
+  .lk .av { width: 38px; height: 38px; border-radius: 10px; display:grid; place-items:center; font: 700 16px var(--f-display); color: #fff; flex: none; }
+  .lk b { display:block; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lk span.h { font-size: 11px; color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display:block; }
+  .lk .x { position:absolute; top: 4px; right: 4px; display:none; } .lk .x button { padding: 0 6px; font-size: 11px; }
+  .lk:hover .x { display:flex !important; }
+  .addf { display:grid; grid-template-columns: 1fr 1.4fr 180px auto; gap: 8px; }
+  @media (max-width: 760px) { .addf { grid-template-columns: 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Organisation</div><h1>Lesezeichen</h1><p>Deine wichtigsten Seiten an einem Ort, nach Gruppen sortiert. Mit <span class="kbd">/</span> suchst du, Enter öffnet den ersten Treffer.</p></div>
+    <input id="q" placeholder="Suchen …" style="max-width:260px">
+  </div>
+  <form class="panel addf" id="f" style="margin-bottom:20px"><input id="n" placeholder="Name"><input id="u" placeholder="https://…" required><input id="g" placeholder="Gruppe" list="groups"><button class="primary">Hinzufügen</button></form>
+  <datalist id="groups"></datalist>
+  <div id="list"></div>
+</main>
+<script>
+WB.header('lesezeichen');
+const { $, $$, esc, uid, Store, toast } = WB;
+const DEF = [['Ausbildung', 'IHK', 'https://www.ihk.de'], ['Ausbildung', 'Microsoft Learn: C#', 'https://learn.microsoft.com/de-de/dotnet/csharp/'], ['Ausbildung', 'Java-Dokumentation', 'https://docs.oracle.com/en/java/'],
+  ['Entwicklung', 'GitHub', 'https://github.com'], ['Entwicklung', 'Stack Overflow', 'https://stackoverflow.com'], ['Entwicklung', 'Docker Hub', 'https://hub.docker.com'], ['Alltag', 'DB Navigator', 'https://www.bahn.de'], ['Alltag', 'Wetter (DWD)', 'https://www.dwd.de']];
+let D = { links: DEF.map(([g, n, u]) => ({ id: uid(), g, n, u })) }, q = '';
+const save = () => Store.set('lesezeichen', D);
+const hue = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return u; } };
+function render() {
+  $('#groups').innerHTML = [...new Set(D.links.map(l => l.g))].map(g => `<option value="${esc(g)}">`).join('');
+  const l = D.links.filter(x => !q || (x.n + x.u + x.g).toLowerCase().includes(q));
+  const groups = [...new Set(l.map(x => x.g || 'Allgemein'))];
+  $('#list').innerHTML = groups.length ? groups.map(g => `<div class="grp"><h3>${esc(g)}</h3><div class="links">${l.filter(x => (x.g || 'Allgemein') === g).map(x =>
+    `<a class="lk" href="${esc(/^https?:\/\//i.test(x.u) ? x.u : '#')}" target="_blank" rel="noopener noreferrer"><span class="av" style="background:hsl(${hue(host(x.u))} 55% 42%)">${esc((x.n || host(x.u))[0].toUpperCase())}</span><div style="min-width:0"><b>${esc(x.n || host(x.u))}</b><span class="h">${esc(host(x.u))}</span></div><span class="x" style="display:flex;gap:2px"><button class="ghost sm" data-ed="${x.id}" title="Bearbeiten">✎</button><button class="ghost sm" data-del="${x.id}" title="Entfernen">✕</button></span></a>`).join('')}</div></div>`).join('')
+    : '<div class="empty">Nichts gefunden</div>';
+}
+$('#f').onsubmit = e => { e.preventDefault(); let u = $('#u').value.trim(); if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  try { new URL(u); } catch { return toast('Ungültige Adresse'); }
+  D.links.push({ id: uid(), n: $('#n').value.trim(), u, g: $('#g').value.trim() || 'Allgemein' }); e.target.reset(); save(); render(); };
+document.addEventListener('click', e => { const ed = e.target.closest('[data-ed]'); if (ed) { e.preventDefault(); e.stopPropagation(); const l = D.links.find(x => x.id === ed.dataset.ed);
+    WB.editForm('Lesezeichen bearbeiten', [{ k: 'n', l: 'Name', v: l.n }, { k: 'u', l: 'Adresse', v: l.u, req: true }, { k: 'g', l: 'Gruppe', v: l.g }]).then(v => { if (v && v !== 'delete') {
+      let u = v.u; if (!/^https?:\/\//i.test(u)) u = 'https://' + u; try { new URL(u); } catch { return toast('Ungültige Adresse'); } Object.assign(l, v, { u, g: v.g || 'Allgemein' }); save(); render(); } }); return; }
+  const b = e.target.closest('[data-del]'); if (b) { e.preventDefault(); e.stopPropagation(); D.links = D.links.filter(x => x.id !== b.dataset.del); save(); render(); } });
+$('#q').oninput = e => { q = e.target.value.toLowerCase(); render(); };
+$('#q').onkeydown = e => { if (e.key === 'Enter') { const a = $('.lk'); if (a) window.open(a.href, '_blank', 'noopener'); } };
+document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement.tagName !== 'INPUT') { e.preventDefault(); $('#q').focus(); } });
+(async () => { D = Object.assign(D, await Store.get('lesezeichen', D)); render(); })();
+</script>
+</body></html>

@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Jellyfin</title>
+<style>
+  main.wrap { max-width: 1480px; }
+  .bar1 { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; margin-bottom: 20px; }
+  .bar1 .libs { display:flex; gap: 6px; flex-wrap: wrap; } .bar1 .libs a.on { border-color: var(--acc); color: var(--acc); }
+  .bar1 form { margin-left: auto; width: min(320px, 100%); }
+  .row-h { display:flex; align-items: baseline; justify-content: space-between; margin: 26px 0 10px; }
+  .strip { display:grid; grid-auto-flow: column; grid-auto-columns: 160px; gap: 14px; overflow-x: auto; padding: 4px 2px 12px; scroll-snap-type: x proximity; }
+  .strip.wide { grid-auto-columns: 270px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px 14px; }
+  .c { text-decoration:none; color: inherit; scroll-snap-align: start; min-width: 0; }
+  .pic { position: relative; aspect-ratio: 2/3; border-radius: 12px; overflow: hidden; background: var(--bg3); border: 1px solid var(--line); display:grid; place-items:center; color: var(--faint); transition: transform .18s var(--ease), border-color .18s; }
+  .wide .pic { aspect-ratio: 16/9; }
+  .c:hover .pic, .c:focus-visible .pic { transform: translateY(-3px); border-color: var(--acc); }
+  .pic img { position:absolute; inset: 0; width:100%; height:100%; object-fit: cover; }
+  .pic .prog { position:absolute; left: 8px; right: 8px; bottom: 8px; height: 4px; border-radius: 4px; background: rgba(0,0,0,.6); } .prog i { display:block; height:100%; border-radius: 4px; background: var(--acc); }
+  .pic .flag { position:absolute; top: 6px; right: 6px; min-width: 22px; padding: 2px 6px; border-radius: 99px; background: var(--acc); color: var(--acc-ink); font: 700 11px var(--f-mono); text-align:center; }
+  .c b { display:block; margin-top: 8px; font-size: 13.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .c small { display:block; color: var(--mute); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hero { position: relative; border-radius: 18px; overflow: hidden; border: 1px solid var(--line); background: var(--bg2); min-height: 340px; display:flex; align-items: end; }
+  .hero > img { position:absolute; inset:0; width:100%; height:100%; object-fit: cover; opacity: .45; }
+  .hero .in { position: relative; width: 100%; display:grid; grid-template-columns: 190px minmax(0,1fr); gap: 24px; padding: 26px; background: linear-gradient(transparent, color-mix(in srgb, var(--bg) 88%, transparent) 35%); }
+  .hero .in.noimg { grid-template-columns: minmax(0,1fr); }
+  .hero .pic { align-self: end; }
+  .hero h2 { font-size: clamp(24px, 3.4vw, 38px); }
+  .facts { display:flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+  .ov { max-width: 75ch; color: var(--text); font-size: 14px; white-space: pre-line; margin-top: 12px; }
+  .eps { display:flex; flex-direction: column; gap: 10px; }
+  .ep { display:grid; grid-template-columns: 200px minmax(0,1fr) auto; gap: 14px; align-items:center; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); }
+  .ep .pic { aspect-ratio: 16/9; } .ep p { color: var(--mute); font-size: 12.5px; display:-webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow:hidden; }
+  .connect { max-width: 440px; margin: 30px auto; }
+  dialog.player { width: 100vw; height: 100vh; height: 100dvh; max-width: 100vw; max-height: 100dvh; padding: 0; border: 0; border-radius: 0; background: #000; color: #fff; }
+  .player[open] { display:grid; grid-template-rows: auto minmax(0,1fr) auto; }
+  .player header, .player footer { display:flex; gap: 10px; align-items:center; padding: 10px 14px; flex-wrap: wrap; }
+  .player header b { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .player video { position:absolute; inset:0; width: 100%; height: 100%; background:#000; }
+  .player button, .player select { background: #1c1f26; color: #fff; border-color: #333a47; width: auto; }
+  .player input[type=range] { flex: 1 1 200px; } .player .time { font: 12px var(--f-mono); color: #aab; }
+  .player .msg { position:absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align:center; pointer-events:none; font-size: 14px; color: #ccd; }
+  @media (max-width: 640px) { .strip { grid-auto-columns: 124px; } .strip.wide { grid-auto-columns: 220px; } .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+    .hero .in { grid-template-columns: minmax(0,1fr); padding: 16px; } .hero .in > .pic { width: 120px; } .ep { grid-template-columns: 110px minmax(0,1fr); } .ep > .row { grid-column: 1 / -1; } .bar1 form { margin-left: 0; width: 100%; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Mediathek</div><h1>Jellyfin</h1><p id="sub">Deine Filme und Serien, direkt in der Werkbank.</p></div>
+    <div class="row hide" id="acc"><span class="chip" id="who"></span><button class="sm" id="unlink">Verbindung trennen</button></div>
+  </div>
+  <nav class="bar1 hide" id="nav"><div class="libs" id="libs"></div><form id="sf" role="search"><input id="sq" type="search" placeholder="Suchen …" maxlength="100"></form></nav>
+  <div id="view"><div class="faint">Lädt …</div></div>
+</main>
+<dialog class="player" id="player">
+  <header><button id="pClose" aria-label="Schließen">✕</button><b class="grow" id="pTitle"></b>
+    <select id="pAudio" class="hide" aria-label="Tonspur"></select><select id="pSub" class="hide" aria-label="Untertitel"></select>
+    <select id="pQual" aria-label="Qualität"><option value="max">Original</option><option value="hoch">Hoch · 10 Mbit</option><option value="mittel">Mittel · 4 Mbit</option><option value="niedrig">Niedrig · 1,5 Mbit</option></select></header>
+  <div id="pBox" style="min-height:0;display:grid;position:relative"><video id="vid" playsinline></video><div class="msg" id="pMsg"></div></div>
+  <footer><button id="pBack" title="10 Sekunden zurück">−10 s</button><button id="pPlay" class="primary">Pause</button><button id="pFwd" title="30 Sekunden vor">+30 s</button>
+    <input type="range" id="pSeek" min="0" step="1" value="0" aria-label="Position"><span class="time" id="pTime"></span>
+    <input type="range" id="pVol" min="0" max="1" step="0.05" value="1" aria-label="Lautstärke" style="flex:0 0 90px"><button id="pNext" class="hide">Nächste Folge ▶</button><button id="pFull">Vollbild</button></footer>
+</dialog>
+<script>
+WB.header('jellyfin');
+const { $, $$, esc, api, toast } = WB;
+let S = null, HOME = null;
+const post = (url, body = {}) => api(url, { method: 'POST', body });
+const clock = s => { s = Math.max(0, Math.floor(s || 0)); const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s % 60).padStart(2, '0'); };
+const minutes = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round(s % 3600 / 60)} min` : s ? Math.max(1, Math.round(s / 60)) + ' min' : '';
+const img = (id, type, tag, w) => `/api/jf/img/${id}/${type}?w=${w}${tag ? '&tag=' + encodeURIComponent(tag) : ''}`;
+const code = x => x.type === 'Episode' && x.episode != null ? `S${x.season ?? '?'}E${x.episode}` : '';
+
+// ---------- Karten ----------
+function picture(x, wide) {
+  let src = '';
+  if (wide) src = x.thumb ? img(x.id, 'Thumb', x.thumb, 560) : x.type === 'Episode' && x.img ? img(x.id, 'Primary', x.img, 560) : x.backdrop ? img(x.id, 'Backdrop', x.backdrop, 560) : x.parentBackdrop ? img(x.parentBackdrop, 'Backdrop', '', 560) : x.img ? img(x.id, 'Primary', x.img, 560) : '';
+  else src = x.type === 'Episode' && x.seriesId && x.seriesImg ? img(x.seriesId, 'Primary', x.seriesImg, 360) : x.img ? img(x.id, 'Primary', x.img, 360) : '';
+  return `<div class="pic">${WB.icon('jellyfin', 30)}${src ? `<img loading="lazy" src="${esc(src)}" alt="">` : ''}${x.pct > 0 && x.pct < 100 ? `<div class="prog"><i style="width:${x.pct}%"></i></div>` : ''}${x.played ? '<span class="flag" title="gesehen">✓</span>' : x.unplayed ? `<span class="flag" title="ungesehen">${x.unplayed}</span>` : ''}</div>`;
+}
+const card = (x, wide) => `<a class="c" href="#/item/${x.id}">${picture(x, wide)}<b title="${esc(x.name)}">${esc(x.type === 'Episode' ? x.series || x.name : x.name)}</b><small>${esc(x.type === 'Episode' ? `${code(x)} · ${x.name}` : [x.year || '', x.type === 'Series' ? 'Serie' : minutes(x.runtime)].filter(Boolean).join(' · '))}</small></a>`;
+const strip = (title, list, wide, link) => list.length ? `<div class="row-h"><h2>${esc(title)}</h2>${link ? `<a class="btn ghost sm" href="${link}">Alle ansehen</a>` : ''}</div><div class="strip ${wide ? 'wide' : ''}">${list.map(x => card(x, wide)).join('')}</div>` : '';
+document.addEventListener('error', e => { if (e.target.tagName === 'IMG') e.target.remove(); }, true);
+
+// ---------- Ansichten ----------
+let seq = 0;
+async function route() {
+  if (!S?.connected) return;
+  const my = ++seq, [, what = '', id = '', extra = ''] = location.hash.split('/');
+  $$('#libs a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === location.hash || (!what && a.getAttribute('href') === '#/')));
+  try {
+    if (what === 'lib') await library(my, id);
+    else if (what === 'item') await item(my, id);
+    else if (what === 'search') await search(my, decodeURIComponent(id));
+    else await home(my);
+  } catch (e) { if (my === seq) fail(e); }
+}
+function fail(e) { if (/verbunden|neu verbinden|abgelaufen, bitte/.test(e.message)) return start(); $('#view').innerHTML = `<div class="panel bad">${esc(e.message)}</div>`; }
+function libs(views) { $('#libs').innerHTML = `<a class="btn sm" href="#/">Start</a>` + views.map(v => `<a class="btn sm" href="#/lib/${v.id}">${esc(v.name)}</a>`).join(''); }
+async function home(my) {
+  const d = HOME = await api('/api/jf/home'); if (my !== seq) return; libs(d.views); $$('#libs a')[0].classList.add('on');
+  const html = strip('Weiterschauen', d.resume, true) + strip('Als Nächstes', d.next, true) + strip('Favoriten', d.favorites)
+    + (d.views.length ? `<div class="row-h"><h2>Bibliotheken</h2></div><div class="strip wide">${d.views.map(v => `<a class="c" href="#/lib/${v.id}">${picture({ ...v, played: false, unplayed: 0 }, true)}<b>${esc(v.name)}</b></a>`).join('')}</div>` : '')
+    + d.latest.map(l => strip('Neu in ' + l.view.name, l.items, false, '#/lib/' + l.view.id)).join('');
+  $('#view').innerHTML = html || '<div class="empty">Dein Jellyfin-Konto sieht noch keine Inhalte.</div>';
+}
+let lib = { id: '', sort: 'name', items: [], total: 0 };
+async function library(my, id) {
+  if (!HOME) { HOME = await api('/api/jf/home'); libs(HOME.views); $$('#libs a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === location.hash)); }
+  const v = HOME.views.find(x => x.id === id) || { name: 'Bibliothek', kind: '' };
+  if (lib.id !== id) lib = { id, sort: lib.sort, items: [], total: 0 };
+  const load = async start => { const r = await api(`/api/jf/items?parent=${id}&kind=${encodeURIComponent(v.kind)}&sort=${lib.sort}&start=${start}`); if (my !== seq) return false; lib.items = start ? lib.items.concat(r.items) : r.items; lib.total = r.total; return true; };
+  const draw = () => { $('#view').innerHTML = `<div class="row between" style="margin-bottom:14px"><h2>${esc(v.name)} <span class="faint" style="font-size:14px">${lib.total}</span></h2>
+      <select id="sort" style="width:auto" aria-label="Sortierung"><option value="name">Name</option><option value="neu">Zuletzt hinzugefügt</option><option value="jahr">Jahr</option><option value="wertung">Bewertung</option></select></div>
+      ${lib.items.length ? `<div class="grid">${lib.items.map(x => card(x)).join('')}</div>` : '<div class="empty">Hier ist noch nichts.</div>'}${lib.items.length < lib.total ? '<div class="row" style="justify-content:center;margin-top:18px"><button id="more">Mehr laden</button></div>' : ''}`;
+    $('#sort').value = lib.sort; $('#sort').onchange = async e => { lib.sort = e.target.value; if (await load(0).catch(fail)) draw(); };
+    if ($('#more')) $('#more').onclick = async () => { $('#more').disabled = true; if (await load(lib.items.length).catch(fail)) draw(); }; };
+  if (await load(0)) draw();
+}
+async function search(my, term) {
+  if (!HOME) { HOME = await api('/api/jf/home'); libs(HOME.views); }
+  const r = await api('/api/jf/items?search=' + encodeURIComponent(term)); if (my !== seq) return;
+  $('#sq').value = term;
+  $('#view').innerHTML = `<h2 style="margin-bottom:14px">Treffer für „${esc(term)}“ <span class="faint" style="font-size:14px">${r.items.length}</span></h2>` + (r.items.length ? `<div class="grid">${r.items.map(x => card(x)).join('')}</div>` : '<div class="empty">Nichts gefunden.</div>');
+}
+let current = null;
+const playable = x => !x.folder && ['Video', 'Audio'].includes(x.media);
+async function item(my, id) {
+  if (!HOME) { HOME = await api('/api/jf/home'); libs(HOME.views); }
+  const d = await api('/api/jf/item/' + id); if (my !== seq) return; current = d; const x = d.item;
+  const back = x.backdrop ? img(x.id, 'Backdrop', x.backdrop, 1600) : x.parentBackdrop ? img(x.parentBackdrop, 'Backdrop', '', 1600) : '';
+  const facts = [x.year, minutes(x.runtime), x.age, x.rating ? '★ ' + String(x.rating).replace('.', ',') : '', ...x.genres].filter(Boolean);
+  const kids = d.children || [];
+  const buttons = (playable(x) ? (x.pos > 30 ? `<button class="primary" data-play="${x.id}" data-pos="${x.pos}">▶ Weiter ab ${clock(x.pos)}</button><button data-play="${x.id}" data-pos="0">Von vorn</button>` : `<button class="primary" data-play="${x.id}" data-pos="0">▶ Abspielen</button>`) : '')
+    + (d.next ? `<button class="primary" data-play="${d.next.id}" data-pos="${d.next.pos}">▶ ${esc(code(d.next))} ${d.next.pos > 30 ? 'weiterschauen' : 'abspielen'}</button>` : '')
+    + `<button data-fav="${x.fav ? 0 : 1}">${x.fav ? '♥ Favorit' : '♡ Favorit'}</button><button data-seen="${x.played ? 0 : 1}">${x.played ? '✓ Gesehen' : 'Als gesehen markieren'}</button>`;
+  const crumbs = [x.seriesId && x.type !== 'Series' ? `<a href="#/item/${x.seriesId}">${esc(x.series)}</a>` : '', x.type === 'Episode' && x.seasonId ? `<a href="#/item/${x.seasonId}">Staffel ${x.season ?? ''}</a>` : ''].filter(Boolean).join(' · ');
+  $('#view').innerHTML = `<div class="hero">${back ? `<img src="${esc(back)}" alt="">` : ''}<div class="in ${x.img ? '' : 'noimg'}">${x.img ? picture({ ...x, type: '', pct: 0, played: false, unplayed: 0 }) : ''}<div>
+      ${crumbs ? `<div class="label" style="margin-bottom:8px">${crumbs}</div>` : ''}<h2>${esc(x.type === 'Episode' ? `${code(x)} · ${x.name}` : x.name)}</h2>
+      <div class="facts">${facts.map(f => `<span class="chip">${esc(f)}</span>`).join('')}</div><div class="row">${buttons}</div>
+      ${x.tagline ? `<p class="mute" style="margin-top:12px;font-style:italic">${esc(x.tagline)}</p>` : ''}${x.overview ? `<p class="ov">${esc(x.overview)}</p>` : ''}</div></div></div>
+    ${d.seasons ? strip('Staffeln', d.seasons) : ''}
+    ${x.type === 'Season' ? `<div class="row-h"><h2>Folgen</h2></div><div class="eps">${kids.map(e => `<div class="ep"><a class="c" href="#/item/${e.id}">${picture(e, true).replace('class="pic"', 'class="pic" style="aspect-ratio:16/9"')}</a><div><b>${e.episode != null ? e.episode + '. ' : ''}${esc(e.name)}</b> <span class="faint" style="font-size:12px">${minutes(e.runtime)}${e.played ? ' · ✓ gesehen' : ''}</span><p>${esc(e.overview)}</p></div><div class="row"><button class="primary sm" data-play="${e.id}" data-pos="${e.pos}">▶ ${e.pos > 30 ? 'Weiter' : 'Abspielen'}</button></div></div>`).join('') || '<div class="empty">Keine Folgen.</div>'}</div>`
+      : kids.length ? `<div class="row-h"><h2>Inhalt</h2></div><div class="grid">${kids.map(c => card(c)).join('')}</div>` : ''}
+    ${x.people.length ? `<div class="row-h"><h2>Mitwirkende</h2></div><div class="row">${x.people.map(p => `<span class="chip">${esc(p.name)}${p.role ? ' · ' + esc(p.role) : ''}</span>`).join('')}</div>` : ''}`;
+  window.scrollTo(0, 0);
+}
+$('#view').addEventListener('click', async e => {
+  const p = e.target.closest('[data-play]'); if (p) return play(p.dataset.play, +p.dataset.pos);
+  const f = e.target.closest('[data-fav],[data-seen]'); if (!f || !current) return; const fav = 'fav' in f.dataset;
+  f.disabled = true; try { await post(`/api/jf/${fav ? 'favorite' : 'played'}/${current.item.id}`, { value: (fav ? f.dataset.fav : f.dataset.seen) === '1' }); HOME = null; route(); } catch (err) { toast(err.message); f.disabled = false; }
+});
+
+// ---------- Abspielen ----------
+const vid = $('#vid');
+let P = null; // laufende Wiedergabe
+const can = t => !!document.createElement('video').canPlayType(t);
+const caps = () => ({ h264: can('video/mp4; codecs="avc1.640028"'), hevc: can('video/mp4; codecs="hvc1.1.6.L120.90"'), vp9: can('video/webm; codecs="vp9"'), av1: can('video/mp4; codecs="av01.0.08M.08"'), mkv: can('video/x-matroska; codecs="avc1.640028, mp4a.40.2"') });
+const pref = (k, v) => { try { if (v === undefined) return localStorage.getItem('wb-jf-' + k); localStorage.setItem('wb-jf-' + k, v); } catch { return null; } };
+const position = () => P ? P.offset + (vid.currentTime || 0) : 0;
+async function play(id, at = 0, opt = {}) {
+  const before = P; if (before) report('stop', before, position()); P = null;
+  if (!$('#player').open) $('#player').showModal();
+  $('#pMsg').textContent = 'Wird vorbereitet …'; vid.removeAttribute('src'); vid.load();
+  const my = play.n = (play.n || 0) + 1;
+  try {
+    const [info, r] = await Promise.all([api('/api/jf/item/' + id), post('/api/jf/play/' + id, { start: at, quality: $('#pQual').value, caps: caps(), audio: opt.audio, forceTranscode: opt.force })]);
+    if (my !== play.n || !$('#player').open) return post('/api/jf/progress/' + r.ticket, { event: 'stop', pos: at }).catch(() => {});
+    P = { id, r, offset: r.method === 'transcode' ? at : 0, duration: r.duration, next: info.after || null, forced: !!opt.force, started: false };
+    const x = info.item; $('#pTitle').textContent = x.type === 'Episode' ? `${x.series} · ${code(x)} · ${x.name}` : x.name;
+    $('#pSeek').max = Math.max(1, r.duration); $('#pSeek').value = at;
+    $('#pAudio').classList.toggle('hide', r.audio.length < 2); $('#pAudio').innerHTML = r.audio.map(a => `<option value="${a.index}">${esc(a.label)}</option>`).join(''); if (r.audioIndex != null) $('#pAudio').value = r.audioIndex;
+    $$('track', vid).forEach(t => t.remove());
+    $('#pSub').classList.toggle('hide', !r.subs.length); $('#pSub').innerHTML = '<option value="">Ohne Untertitel</option>' + r.subs.map(s => `<option value="${s.index}">${esc(s.label)}</option>`).join('');
+    $('#pNext').classList.toggle('hide', !P.next);
+    vid.src = r.url; if (!P.offset && at) vid.addEventListener('loadedmetadata', () => { vid.currentTime = at; }, { once: true });
+    vid.play().catch(() => { $('#pMsg').textContent = 'Auf „Abspielen“ tippen'; });
+    paint();
+  } catch (e) { if (my === play.n) $('#pMsg').textContent = e.message; }
+}
+function report(event, p = P, pos = position()) { if (!p) return; post('/api/jf/progress/' + p.r.ticket, { event, pos, paused: vid.paused }).catch(() => {}); }
+function paint() { const pos = position(); if (!$('#pSeek').matches(':active')) $('#pSeek').value = pos; $('#pTime').textContent = `${clock(pos)} / ${clock(P?.duration || vid.duration)}`; $('#pPlay').textContent = vid.paused ? 'Abspielen' : 'Pause'; }
+function seek(to) { if (!P) return; to = Math.max(0, Math.min(to, Math.max(0, P.duration - 2)));
+  if (P.r.method === 'direct') vid.currentTime = to; else play(P.id, to, { force: P.forced, audio: +$('#pAudio').value || undefined }); }
+vid.addEventListener('timeupdate', paint); vid.addEventListener('pause', () => { paint(); if (P?.started) report('progress'); });
+vid.addEventListener('playing', () => { $('#pMsg').textContent = ''; paint(); if (P && !P.started) { P.started = true; report('start'); } });
+vid.addEventListener('waiting', () => { if (P) $('#pMsg').textContent = 'Lädt …'; });
+vid.addEventListener('error', () => { if (!P || !vid.getAttribute('src')) return;
+  if (!P.forced) return play(P.id, position(), { force: true }); // Original ging nicht: umwandeln lassen
+  $('#pMsg').textContent = 'Diese Datei lässt sich im Browser nicht abspielen.'; });
+vid.addEventListener('ended', () => { if (!P) return; const n = P.next; report('stop', P, P.duration); P = null; if (n) play(n.id, 0); else $('#player').close(); });
+setInterval(() => { if (P?.started && !vid.paused) report('progress'); }, 10000);
+$('#pPlay').onclick = () => vid.paused ? vid.play() : vid.pause();
+vid.onclick = () => $('#pPlay').click();
+$('#pBack').onclick = () => seek(position() - 10); $('#pFwd').onclick = () => seek(position() + 30);
+$('#pSeek').onchange = e => seek(+e.target.value);
+$('#pVol').oninput = e => { vid.volume = +e.target.value; pref('vol', e.target.value); };
+$('#pQual').onchange = () => { pref('qual', $('#pQual').value); if (P) play(P.id, position(), { force: $('#pQual').value !== 'max' && P.forced }); };
+$('#pAudio').onchange = () => { if (P) play(P.id, position(), { audio: +$('#pAudio').value }); };
+$('#pSub').onchange = () => { $$('track', vid).forEach(t => t.remove()); const i = $('#pSub').value; if (!P || i === '') return;
+  const t = document.createElement('track'); t.kind = 'subtitles'; t.label = 'Untertitel'; t.src = `/api/jf/sub/${P.r.ticket}/${i}`; t.default = true; vid.appendChild(t); t.track.mode = 'showing'; };
+$('#pNext').onclick = () => { if (P?.next) play(P.next.id, P.next.pos || 0); };
+$('#pFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : ($('#player').requestFullscreen?.() || vid.webkitEnterFullscreen?.());
+$('#pClose').onclick = () => $('#player').close();
+$('#player').addEventListener('close', () => { if (P) report('stop'); P = null; play.n = (play.n || 0) + 1; vid.pause(); vid.removeAttribute('src'); vid.load(); if (document.fullscreenElement) document.exitFullscreen(); HOME = null; route(); });
+$('#player').addEventListener('keydown', e => { if (/SELECT|INPUT/.test(e.target.tagName)) return;
+  if (e.key === ' ' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('#pPlay').click(); } if (e.key === 'ArrowLeft') seek(position() - 10); if (e.key === 'ArrowRight') seek(position() + 30); });
+window.addEventListener('pagehide', () => { if (P) fetch('/api/jf/progress/' + P.r.ticket, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ event: 'stop', pos: position() }) }).catch(() => {}); });
+
+// ---------- Verbinden ----------
+function connectView() {
+  const s = S;
+  if (!s.configured || !s.reachable) { $('#view').innerHTML = `<div class="panel connect stack"><h2>Jellyfin nicht erreichbar</h2><p class="mute">${s.configured ? 'Der Jellyfin-Server antwortet gerade nicht. Läuft der Container?' : 'In der Werkbank ist keine Jellyfin-Adresse eingetragen.'}</p><button class="primary" id="retry">Erneut versuchen</button></div>`; $('#retry').onclick = start; return; }
+  $('#view').innerHTML = `<form class="panel connect stack" id="cf"><h2>Mit Jellyfin verbinden</h2>
+    <p class="mute" style="font-size:14px">Melde dich einmal mit deinem <b>Jellyfin-Konto</b> bei „${esc(s.server.name)}“ an. Das Passwort wird nicht gespeichert. Das Zugangs-Token bleibt auf dem Server und kommt nie in deinen Browser.</p>
+    <label class="field"><span>Jellyfin-Benutzername</span><input id="ju" autocomplete="off" autocapitalize="off" spellcheck="false" required maxlength="100"></label>
+    <label class="field"><span>Jellyfin-Passwort</span><input id="jp" type="password" autocomplete="off" maxlength="200"></label>
+    <p class="bad" id="jerr" style="font-size:13px"></p><button class="primary" id="jb">Verbinden</button></form>`;
+  $('#cf').onsubmit = async e => { e.preventDefault(); $('#jb').disabled = true; $('#jerr').textContent = '';
+    try { await post('/api/jf/login', { user: $('#ju').value, pass: $('#jp').value }); $('#jp').value = ''; start(); } catch (err) { $('#jerr').textContent = err.message; $('#jb').disabled = false; } };
+}
+async function start() {
+  HOME = null;
+  try { S = await api('/api/jf/status'); } catch (e) { $('#view').innerHTML = `<div class="panel bad">${esc(e.message)}</div>`; return; }
+  const on = S.connected;
+  $('#acc').classList.toggle('hide', !on); $('#nav').classList.toggle('hide', !on); $('#who').textContent = on ? `${S.user} @ ${S.server?.name || 'Jellyfin'}` : '';
+  $('#pQual').value = pref('qual') || (S.remote ? 'mittel' : 'max'); const v = +(pref('vol') ?? 1); $('#pVol').value = vid.volume = v >= 0 && v <= 1 ? v : 1;
+  if (on) route(); else connectView();
+}
+$('#unlink').onclick = async () => { if (!confirm('Verbindung zu Jellyfin trennen?')) return; await post('/api/jf/logout').catch(e => toast(e.message)); location.hash = ''; start(); };
+$('#sf').onsubmit = e => { e.preventDefault(); const t = $('#sq').value.trim(); if (t) location.hash = '#/search/' + encodeURIComponent(t); };
+window.addEventListener('hashchange', route);
+start();
+</script>
+</body></html>
