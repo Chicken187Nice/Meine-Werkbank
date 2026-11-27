@@ -64,6 +64,11 @@ Zero-dependency Node.js · one container · runs on a laptop or a home server.
 
 ### Linux server (e.g. Ubuntu)
 
+```bash
+git clone https://github.com/Chicken187Nice/Meine-Werkbank.git
+cd Meine-Werkbank
+bash start.sh
+```
 
 `start.sh` does the following:
 - installs Docker if needed (asks first)
