@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Küche</title>
+<style>
+  .inv { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .inv .chip button { background:none; border:0; padding:0 0 0 2px; color:inherit; font-size:12px; }
+  .rec { border:1px solid var(--line); border-radius:var(--r-sm); padding:14px; background:var(--bg); display:flex; flex-direction:column; gap:8px; }
+  .rec .match { font: 600 12px var(--f-mono); }
+  .rec .ing { font-size:13px; color:var(--mute); line-height:1.6; }
+  .rec .ing .have { color: var(--text); } .rec .ing .miss { text-decoration: underline dotted var(--bad); }
+  .recs { display:grid; grid-template-columns: repeat(auto-fill, minmax(230px,1fr)); gap:10px; }
+  .week { display:grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap:8px; }
+  .day { border:1px solid var(--line); border-radius:var(--r-sm); padding:10px; min-height:92px; background:var(--bg); display:flex; flex-direction:column; gap:6px; }
+  .day .dn { font: 600 11px var(--f-mono); letter-spacing:.1em; color:var(--mute); }
+  .day.today { border-color: var(--acc); } .day.today .dn { color: var(--acc); }
+  .day select { font-size:12px; padding:5px; }
+  .shop .it label { display:flex; gap:10px; align-items:center; flex:1; cursor:pointer; }
+  .shop .it.done span { text-decoration: line-through; color: var(--faint); }
+  .day .go { font-size:11px; padding:3px 6px; align-self:flex-start; }
+  .rec .acts { display:grid; grid-template-columns: 1fr 1fr; gap:6px; }
+  /* Kochmodus */
+  #cook { width:min(860px,96vw); max-width:none; padding:0; }
+  #cook .ch { display:flex; gap:14px; align-items:center; padding:18px 22px; border-bottom:1px solid var(--line); }
+  #cook .ch img { width:64px; height:64px; border-radius:12px; object-fit:cover; }
+  #cook .cb { display:grid; grid-template-columns: 250px 1fr; min-height:380px; }
+  #cook .ci { border-right:1px solid var(--line); padding:18px 20px; display:flex; flex-direction:column; gap:8px; overflow:auto; max-height:62vh; }
+  #cook .ci label { display:flex; gap:8px; align-items:flex-start; font-size:14px; cursor:pointer; line-height:1.35; }
+  #cook .ci label.got span { text-decoration:line-through; color:var(--faint); }
+  #cook .cs { padding:22px 26px; display:flex; flex-direction:column; gap:16px; }
+  #cook .num { font:600 12px var(--f-mono); letter-spacing:.12em; color:var(--acc); }
+  #cook .stxt { font-size:21px; line-height:1.5; flex:1; }
+  #cook .dots { display:flex; gap:5px; flex-wrap:wrap; } #cook .dots i { width:22px; height:5px; border-radius:3px; background:var(--line); cursor:pointer; } #cook .dots i.on { background:var(--acc); } #cook .dots i.done { background:color-mix(in srgb,var(--acc) 45%,var(--line)); }
+  #cook .timer { display:flex; align-items:center; gap:10px; padding:10px 14px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg); }
+  #cook .timer b { font:600 22px var(--f-mono); min-width:76px; } #cook .timer.ring { border-color:var(--bad); animation: ring 1s infinite; }
+  @keyframes ring { 50% { background: color-mix(in srgb, var(--bad) 18%, var(--bg)); } }
+  #cook .all ol { padding-left:20px; display:flex; flex-direction:column; gap:10px; line-height:1.5; }
+  #cook .src { font-size:12px; color:var(--mute); }
+  .portions { display:flex; align-items:center; gap:8px; font-size:13px; } .portions button { padding:2px 9px; }
+  .net { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:10px; }
+  .net .rec img { width:100%; aspect-ratio: 4/3; object-fit:cover; border-radius:8px; background:var(--line); }
+  @media (max-width:760px){ #cook .cb { grid-template-columns: 1fr; } #cook .ci { border-right:0; border-bottom:1px solid var(--line); max-height:none; } #cook .stxt { font-size:18px; } }
+  @media (max-width:900px){ .week { grid-template-columns: repeat(2,1fr); } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Alltag</div><h1>Küche</h1><p>Trag ein, was da ist. Die Gerichte sortieren sich danach, wie wenig du noch kaufen musst. Plane die Woche und die Einkaufsliste entsteht von selbst.</p></div>
+    <div class="stack" style="gap:6px;align-items:flex-end"><span class="label">Ernährung</span><div class="tabs" id="diet"><button data-d="alle">Alles</button><button data-d="veg">Vegetarisch</button><button data-d="vegan">Vegan</button></div></div>
+  </div>
+
+  <div class="side">
+    <div class="stack">
+      <div class="panel">
+        <div class="panel-h"><span class="label">Kühlschrank & Vorrat</span><button class="sm ghost" id="clearInv">leeren</button></div>
+        <form id="invForm" class="row" style="flex-wrap:nowrap"><input id="invIn" placeholder="z. B. Eier, Nudeln, Paprika" list="allIng"><button>+</button></form>
+        <datalist id="allIng"></datalist>
+        <div class="inv" id="inv"></div>
+        <p class="faint" style="font-size:12px;margin-top:10px">Salz, Pfeffer und Öl werden als vorhanden angenommen.</p>
+      </div>
+      <div class="panel shop">
+        <div class="panel-h"><span class="label">Einkaufsliste</span><button class="sm" id="copy">Kopieren</button></div>
+        <div class="list" id="shop"></div>
+        <form id="extraForm" class="row" style="flex-wrap:nowrap;margin-top:10px"><input id="extraIn" placeholder="Extra: Spülmittel …"><button>+</button></form>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="panel">
+        <div class="panel-h"><span class="label">Wochenplan</span><button class="sm ghost" id="autoPlan">Automatisch füllen</button></div>
+        <div class="week" id="week"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><span class="label">Gerichte</span>
+          <div class="row"><div class="tabs" id="tagF"><button class="on" data-t="">Alle</button><button data-t="veggie">Vegetarisch</button><button data-t="vegan">Vegan</button><button data-t="schnell">≤ 20 Min</button></div><button class="sm" id="addRec">+ Eigenes</button></div></div>
+        <div class="recs" id="recs"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><span class="label">Rezepte aus dem Netz</span><span class="faint" style="font-size:12px" id="netInfo"></span></div>
+        <form id="netForm" class="row" style="flex-wrap:nowrap"><input id="netIn" placeholder="Gericht oder Zutat, z. B. Kürbis, Curry, pasta – leer = Zufallsideen"><button class="primary">Suchen</button></form>
+        <p class="faint" style="font-size:12px;margin:8px 0 0">Quelle: TheMealDB. Die Anleitungen dort sind auf Englisch. Mit „Übernehmen“ landet ein Rezept bei deinen eigenen und kann bearbeitet werden. Dein Ernährungs-Filter gilt auch hier.</p>
+        <div class="net" id="net" style="margin-top:12px"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<dialog id="recDlg"><form method="dialog" class="stack" id="rf">
+  <h3>Eigenes Rezept</h3>
+  <label class="field"><span>Name</span><input name="rname" required></label>
+  <label class="field"><span>Zutaten (mit Komma getrennt)</span><textarea name="ing" required placeholder="Nudeln, Tomaten, Knoblauch"></textarea></label>
+  <label class="field"><span>Mengen (optional, eine pro Zeile)</span><textarea name="amt" placeholder="250 g Nudeln&#10;1 Dose Tomaten"></textarea></label>
+  <label class="field"><span>Anleitung (ein Schritt pro Zeile · „(10 Min)“ am Ende = Timer)</span><textarea name="steps" rows="5" placeholder="Wasser aufsetzen und salzen.&#10;Nudeln kochen (10 Min)"></textarea></label>
+  <div class="fields"><label class="field"><span>Minuten</span><input name="min" type="number" value="30"></label>
+  <label class="field"><span>Ernährung</span><select name="veg"><option value="vegan">vegan</option><option value="veg" selected>vegetarisch</option><option value="fleisch">mit Fleisch oder Fisch</option></select></label></div>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+</form></dialog>
+
+<dialog id="cook"><div id="cookIn"></div></dialog>
+
+<script>
+WB.header('kueche');
+const { $, esc, uid, Store, toast } = WB;
+const BASE = ['salz','pfeffer','öl'];
+// Schritt-für-Schritt-Anleitungen für 2 Portionen. "|10" am Ende eines Schritts = Timer mit 10 Minuten.
+const GUIDE = {
+'Spaghetti Aglio e Olio': [['200 g Spaghetti','4 Zehen Knoblauch','1 rote Chili (oder ½ TL Chiliflocken)','½ Bund Petersilie','5 EL Olivenöl','Salz, Pfeffer'], [
+  'Einen großen Topf mit reichlich Wasser aufsetzen und kräftig salzen (ca. 1 EL Salz pro Liter).',
+  'Knoblauch in dünne Scheiben schneiden, Chili entkernen und fein hacken, Petersilie hacken.',
+  'Spaghetti ins kochende Wasser geben und nach Packungsangabe bissfest kochen.|9',
+  'Währenddessen das Öl in einer großen Pfanne bei kleiner Hitze erwärmen, Knoblauch und Chili darin langsam goldgelb werden lassen – nicht braun, sonst wird es bitter.|4',
+  'Eine Tasse Nudelwasser abschöpfen, dann die Spaghetti abgießen.',
+  'Nudeln in die Pfanne geben, mit einem Schuss Nudelwasser und der Petersilie gut durchschwenken, bis eine leicht cremige Soße entsteht. Mit Salz und Pfeffer abschmecken.']],
+'Shakshuka': [['4 Eier','1 Dose gehackte Tomaten (400 g)','1 rote Paprika','1 Zwiebel','1 Zehe Knoblauch','1 TL Kreuzkümmel','1 TL Paprikapulver','2 Scheiben Brot','2 EL Öl, Salz, Pfeffer'], [
+  'Zwiebel und Paprika würfeln, Knoblauch fein hacken.',
+  'Öl in einer Pfanne mit Deckel erhitzen, Zwiebel und Paprika darin weich braten.|6',
+  'Knoblauch, Kreuzkümmel und Paprikapulver kurz mitrösten, bis es duftet.|1',
+  'Tomaten dazugeben, salzen, pfeffern und offen einköcheln lassen, bis die Soße dicklich ist.|8',
+  'Mit einem Löffel 4 Mulden in die Soße drücken und je ein Ei hineinschlagen.',
+  'Deckel drauf und bei mittlerer Hitze stocken lassen, bis das Eiweiß fest und das Eigelb noch weich ist.|6',
+  'Mit etwas Salz und Pfeffer bestreuen und mit (geröstetem) Brot direkt aus der Pfanne essen.']],
+'Gemüse-Curry': [['1 Dose Kokosmilch (400 ml)','1–2 EL rote Currypaste','1 rote Paprika','1 Zucchini','1 Zwiebel','150 g Reis','1 EL Öl, Salz','optional: Limette, Sojasoße'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Zwiebel würfeln, Paprika und Zucchini in mundgerechte Stücke schneiden.',
+  'Öl im Topf erhitzen, Zwiebel glasig dünsten, dann die Currypaste kurz mitrösten.|3',
+  'Paprika und Zucchini dazugeben und kurz anbraten.|3',
+  'Mit Kokosmilch ablöschen und köcheln lassen, bis das Gemüse gar, aber noch bissfest ist.|10',
+  'Mit Salz, etwas Sojasoße und Limettensaft abschmecken und mit dem Reis servieren.']],
+'Chili sin Carne': [['1 Dose Kidneybohnen','1 kleine Dose Mais','1 Dose gehackte Tomaten','1 Zwiebel','1 rote Paprika','150 g Reis','1 TL Kreuzkümmel, 1 TL Paprikapulver, Chili nach Geschmack','1 EL Öl, Salz, Pfeffer'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Zwiebel und Paprika würfeln. Bohnen und Mais in einem Sieb abspülen.',
+  'Öl im Topf erhitzen, Zwiebel und Paprika anbraten.|5',
+  'Gewürze kurz mitrösten, dann Tomaten, Bohnen und Mais dazugeben.',
+  'Alles bei kleiner Hitze köcheln lassen, gelegentlich umrühren.|20',
+  'Mit Salz, Pfeffer und Chili abschmecken und mit dem Reis servieren.']],
+'Chili con Carne': [['300 g Hackfleisch (Rind)','1 Dose Kidneybohnen','1 kleine Dose Mais','1 Dose gehackte Tomaten','1 Zwiebel','1 rote Paprika','1 TL Kreuzkümmel, 1 TL Paprikapulver, Chili','1 EL Öl, Salz, Pfeffer'], [
+  'Zwiebel und Paprika würfeln, Bohnen und Mais abspülen.',
+  'Öl im Topf stark erhitzen und das Hackfleisch krümelig braun anbraten.|6',
+  'Zwiebel und Paprika dazugeben und mitbraten.|4',
+  'Gewürze kurz mitrösten, dann Tomaten, Bohnen und Mais unterrühren.',
+  'Zugedeckt bei kleiner Hitze schmoren lassen, ab und zu umrühren.|25',
+  'Mit Salz, Pfeffer und Chili abschmecken. Passt zu Reis, Brot oder Nachos.']],
+'Pfannkuchen': [['200 g Mehl','3 Eier','350 ml Milch','1 EL Zucker','1 Prise Salz','Butter oder Öl zum Braten'], [
+  'Mehl, Zucker und Salz in eine Schüssel geben. Eier und die Hälfte der Milch dazu und glatt rühren.',
+  'Restliche Milch unterrühren, bis ein flüssiger, klümpchenfreier Teig entsteht. Kurz ruhen lassen.|10',
+  'Etwas Butter in einer beschichteten Pfanne bei mittlerer Hitze schmelzen.',
+  'Eine Kelle Teig hineingeben und durch Schwenken verteilen. Backen, bis die Unterseite goldbraun ist.|2',
+  'Wenden und die zweite Seite backen. Mit dem restlichen Teig genauso weitermachen.|1',
+  'Mit Zucker, Apfelmus, Nutella oder Obst servieren.']],
+'Omelett mit Gemüse': [['4 Eier','½ Paprika','½ Zwiebel','40 g geriebener Käse','2 EL Milch','1 EL Butter, Salz, Pfeffer'], [
+  'Paprika und Zwiebel klein würfeln.',
+  'Eier mit Milch, Salz und Pfeffer verquirlen.',
+  'Butter in einer Pfanne erhitzen und das Gemüse weich braten.|4',
+  'Eimasse darübergießen und bei kleiner bis mittlerer Hitze stocken lassen, den Rand ab und zu zur Mitte schieben.|3',
+  'Käse auf eine Hälfte streuen, das Omelett zusammenklappen und kurz weiterziehen lassen, bis der Käse schmilzt.|1']],
+'Bratkartoffeln mit Spiegelei': [['600 g festkochende Kartoffeln','1 Zwiebel','4 Eier','3 EL Öl','Salz, Pfeffer, Paprikapulver'], [
+  'Kartoffeln mit Schale in Salzwasser fast gar kochen (am besten schon am Vortag).|15',
+  'Kartoffeln abgießen, ausdampfen lassen, pellen und in Scheiben schneiden. Zwiebel würfeln.',
+  'Öl in einer großen Pfanne heiß werden lassen, Kartoffeln in einer Lage hineingeben und zuerst nicht bewegen.|6',
+  'Wenden, Zwiebel dazugeben und weiterbraten, bis alles goldbraun und knusprig ist. Würzen.|6',
+  'In einer zweiten Pfanne die Eier als Spiegeleier braten.|4',
+  'Bratkartoffeln mit den Spiegeleiern servieren.']],
+'Pasta Bolognese': [['250 g Nudeln','300 g Hackfleisch','1 Dose gehackte Tomaten','1 Zwiebel','1 Karotte','1 Zehe Knoblauch','1 EL Tomatenmark','1 EL Öl, Salz, Pfeffer, Oregano'], [
+  'Zwiebel, Karotte und Knoblauch sehr fein würfeln.',
+  'Öl im Topf erhitzen und das Hackfleisch krümelig braun anbraten.|6',
+  'Gemüse dazugeben und mitbraten, dann das Tomatenmark kurz anrösten.|4',
+  'Tomaten und einen Schuss Wasser dazugeben, würzen und bei kleiner Hitze köcheln lassen.|25',
+  'In der Zwischenzeit die Nudeln in Salzwasser bissfest kochen.|10',
+  'Soße abschmecken und mit den Nudeln servieren, nach Wunsch mit Parmesan.']],
+'Pasta mit Tomatensoße': [['250 g Nudeln','1 Dose gehackte Tomaten','1 Zwiebel','2 Zehen Knoblauch','30 g Parmesan','2 EL Olivenöl','Salz, Pfeffer, Zucker, Basilikum oder Oregano'], [
+  'Wasser für die Nudeln aufsetzen und salzen. Zwiebel und Knoblauch fein würfeln.',
+  'Olivenöl im Topf erhitzen, Zwiebel glasig dünsten, Knoblauch kurz mitdünsten.|4',
+  'Tomaten dazu, mit Salz, Pfeffer, einer Prise Zucker und Kräutern würzen und köcheln lassen.|12',
+  'Nudeln nach Packungsangabe bissfest kochen.|10',
+  'Nudeln abgießen, mit der Soße mischen und mit geriebenem Parmesan servieren.']],
+'Gebratener Reis': [['150 g Reis (am besten vom Vortag)','2 Eier','100 g Erbsen (TK)','1 Karotte','2 Frühlingszwiebeln','3 EL Sojasoße','2 EL Öl'], [
+  'Falls kein Reis vom Vortag da ist: Reis kochen und ausgebreitet gut abkühlen lassen.|15',
+  'Karotte klein würfeln, Frühlingszwiebeln in Ringe schneiden.',
+  'Öl in einer großen Pfanne oder einem Wok stark erhitzen, Karotte und Erbsen anbraten.|3',
+  'Gemüse an den Rand schieben, Eier in die Mitte schlagen und unter Rühren stocken lassen.|1',
+  'Reis dazugeben und unter ständigem Wenden heiß und leicht knusprig braten.|4',
+  'Mit Sojasoße ablöschen, Frühlingszwiebeln unterheben und sofort servieren.']],
+'Hähnchen-Pfanne': [['300 g Hähnchenbrust','1 Paprika','1 Zucchini','150 g Reis','3 EL Sojasoße','1 TL Speisestärke','1 EL Öl, Pfeffer'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Hähnchen in Streifen schneiden, Paprika und Zucchini in Stücke.',
+  'Öl stark erhitzen und das Hähnchen rundum anbraten, bis es durch ist. Herausnehmen.|6',
+  'Gemüse in derselben Pfanne bissfest braten.|5',
+  'Sojasoße mit Stärke und 4 EL Wasser verrühren, mit dem Hähnchen zurück in die Pfanne geben und kurz andicken lassen.|1',
+  'Mit Pfeffer abschmecken und mit dem Reis servieren.']],
+'Linsensuppe': [['150 g Tellerlinsen','2 Karotten','2 Kartoffeln','1 Zwiebel','1 l Gemüsebrühe','1 EL Öl, Salz, Pfeffer','1 Schuss Essig'], [
+  'Zwiebel, Karotten und Kartoffeln würfeln. Linsen in einem Sieb abspülen.',
+  'Öl im Topf erhitzen und die Zwiebel glasig dünsten.|3',
+  'Karotten, Kartoffeln und Linsen dazugeben und mit der Brühe aufgießen.',
+  'Aufkochen und zugedeckt köcheln lassen, bis Linsen und Kartoffeln weich sind.|30',
+  'Mit Salz, Pfeffer und einem Schuss Essig abschmecken.']],
+'Kartoffelsuppe': [['600 g mehligkochende Kartoffeln','1 Karotte','1 Stange Lauch','800 ml Gemüsebrühe','100 ml Sahne','1 EL Butter, Salz, Pfeffer, Muskat'], [
+  'Kartoffeln und Karotte schälen und würfeln, Lauch in Ringe schneiden und waschen.',
+  'Butter im Topf schmelzen und den Lauch andünsten.|3',
+  'Kartoffeln und Karotte dazu, mit Brühe aufgießen und weich köcheln.|20',
+  'Suppe ganz oder zur Hälfte pürieren.',
+  'Sahne einrühren, mit Salz, Pfeffer und Muskat abschmecken.']],
+'Wraps': [['4 Tortillas','1 Dose Kidneybohnen','1 kleine Dose Mais','½ Kopf Salat','80 g geriebener Käse','100 g saure Sahne','Salz, Pfeffer, Paprikapulver'], [
+  'Bohnen und Mais abspülen, mit Salz, Pfeffer und Paprikapulver würzen und in einer Pfanne kurz erwärmen.|3',
+  'Salat waschen und in Streifen schneiden.',
+  'Tortillas ohne Fett in der Pfanne je Seite kurz erwärmen.|1',
+  'Tortillas mit saurer Sahne bestreichen, mit Bohnen-Mais-Mix, Salat und Käse belegen.',
+  'Unten einschlagen, seitlich aufrollen und sofort essen.']],
+'Flammkuchen': [['1 Rolle Flammkuchenteig','200 g Schmand','1 Zwiebel','100 g Speckwürfel','Salz, Pfeffer, Muskat'], [
+  'Ofen auf 220 °C Ober-/Unterhitze vorheizen.|10',
+  'Zwiebel in sehr dünne Ringe schneiden.',
+  'Teig mit dem Backpapier aufs Blech legen. Schmand mit Salz, Pfeffer und Muskat verrühren und dünn aufstreichen.',
+  'Zwiebeln und Speck gleichmäßig verteilen.',
+  'Im unteren Drittel backen, bis der Rand knusprig und goldbraun ist.|13']],
+'Ofengemüse mit Feta': [['400 g Kartoffeln','1 Paprika','1 Zucchini','1 rote Zwiebel','200 g Feta','3 EL Olivenöl','Salz, Pfeffer, Rosmarin oder Thymian'], [
+  'Ofen auf 200 °C Umluft vorheizen.|8',
+  'Kartoffeln in Spalten, das übrige Gemüse in grobe Stücke schneiden.',
+  'Kartoffeln mit Öl, Salz und Kräutern mischen und auf dem Blech vorbacken.|15',
+  'Restliches Gemüse dazugeben, durchmischen und weiterbacken.|15',
+  'Feta darüberbröseln und nochmal backen, bis er leicht gebräunt ist.|5']],
+'Käsespätzle': [['400 g Spätzle (Kühlregal)','150 g Bergkäse oder Emmentaler, gerieben','2 Zwiebeln','2 EL Butter','Salz, Pfeffer, Schnittlauch'], [
+  'Zwiebeln in Ringe schneiden und in 1 EL Butter langsam goldbraun braten. Beiseitestellen.|10',
+  'Restliche Butter in der Pfanne schmelzen und die Spätzle darin anbraten.|4',
+  'Käse schichtweise unterheben und schmelzen lassen, dabei vorsichtig wenden.|2',
+  'Pfeffern, Röstzwiebeln obendrauf und mit Schnittlauch servieren.']],
+'Griechischer Salat': [['3 Tomaten','1 Gurke','200 g Feta','½ rote Zwiebel','1 Handvoll Oliven','3 EL Olivenöl, 1 EL Essig','Salz, Pfeffer, Oregano'], [
+  'Tomaten und Gurke in grobe Stücke schneiden, Zwiebel in feine Ringe.',
+  'Alles mit den Oliven in eine Schüssel geben.',
+  'Öl, Essig, Salz, Pfeffer und Oregano verrühren und über den Salat geben.',
+  'Feta in Scheiben oder Würfeln obendrauf legen, mit Oregano bestreuen.']],
+'Lachs mit Reis & Brokkoli': [['2 Lachsfilets (je ca. 125 g)','150 g Reis','1 Brokkoli','1 Zitrone','1 EL Öl, Salz, Pfeffer'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Brokkoli in Röschen teilen und in Salzwasser bissfest garen.|5',
+  'Lachs trocken tupfen, salzen und pfeffern.',
+  'Öl in einer Pfanne erhitzen und den Lachs auf der Hautseite braten.|4',
+  'Wenden und kurz auf der anderen Seite fertig garen – innen darf er noch leicht glasig sein.|2',
+  'Mit Zitronensaft beträufeln und mit Reis und Brokkoli anrichten.']],
+'Porridge': [['80 g Haferflocken','300 ml Milch','1 Banane','1 Prise Salz','optional: Honig, Zimt, Nüsse'], [
+  'Haferflocken, Milch und Salz in einen kleinen Topf geben und unter Rühren aufkochen.',
+  'Bei kleiner Hitze cremig köcheln lassen, dabei rühren.|4',
+  'Banane in Scheiben schneiden und darauf verteilen, nach Wunsch mit Honig, Zimt oder Nüssen.']],
+'Porridge mit Haferdrink': [['80 g Haferflocken','300 ml Haferdrink','1 Banane','½ TL Zimt','1 Prise Salz','optional: Ahornsirup, Nüsse'], [
+  'Haferflocken, Haferdrink, Zimt und Salz in einen Topf geben und unter Rühren aufkochen.',
+  'Bei kleiner Hitze cremig köcheln lassen.|4',
+  'Halbe Banane hineinmatschen, den Rest in Scheiben obendrauf legen, nach Wunsch mit Ahornsirup und Nüssen.']],
+'Kichererbsen-Curry': [['1 Dose Kichererbsen','1 Dose Kokosmilch','1 Dose gehackte Tomaten','2 Handvoll Spinat','1 Zwiebel','1 Zehe Knoblauch','2 TL Currypulver','150 g Reis','1 EL Öl, Salz'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Zwiebel und Knoblauch fein würfeln, Kichererbsen abspülen.',
+  'Öl im Topf erhitzen, Zwiebel und Knoblauch andünsten, Currypulver kurz mitrösten.|3',
+  'Tomaten, Kokosmilch und Kichererbsen dazugeben und köcheln lassen.|12',
+  'Spinat unterrühren, bis er zusammenfällt, dann mit Salz abschmecken.|1',
+  'Mit dem Reis servieren.']],
+'Linsen-Bolognese': [['250 g Nudeln','100 g rote Linsen','1 Dose gehackte Tomaten','1 Zwiebel','1 Karotte','1 Zehe Knoblauch','1 EL Tomatenmark','1 EL Öl, Salz, Pfeffer, Oregano'], [
+  'Zwiebel, Karotte und Knoblauch fein würfeln, Linsen abspülen.',
+  'Öl im Topf erhitzen, Gemüse andünsten, Tomatenmark kurz mitrösten.|4',
+  'Linsen, Tomaten und 250 ml Wasser dazugeben, würzen und köcheln lassen, bis die Linsen weich sind.|15',
+  'Währenddessen die Nudeln bissfest kochen.|10',
+  'Soße abschmecken (bei Bedarf noch etwas Wasser) und mit den Nudeln mischen.']],
+'Tofu-Gemüse-Pfanne': [['200 g Naturtofu','1 Brokkoli','1 Paprika','1 Zehe Knoblauch','3 EL Sojasoße','1 TL Speisestärke','150 g Reis','2 EL Öl'], [
+  'Reis nach Packungsangabe kochen.|15',
+  'Tofu gut ausdrücken und würfeln, Brokkoli in Röschen, Paprika in Streifen schneiden, Knoblauch hacken.',
+  'Öl stark erhitzen und den Tofu rundum knusprig braten. Herausnehmen.|8',
+  'Gemüse und Knoblauch in derselben Pfanne bissfest braten.|5',
+  'Sojasoße mit Stärke und 4 EL Wasser verrühren, mit dem Tofu zurück in die Pfanne und kurz andicken lassen.|1',
+  'Mit dem Reis servieren.']],
+'Falafel-Bowl': [['1 Packung Falafel (ca. 8 Stück)','120 g Couscous','½ Gurke','2 Tomaten','100 g Hummus','2 Handvoll Salat','1 Zitrone, Salz, Olivenöl'], [
+  'Couscous mit der gleichen Menge kochendem, gesalzenem Wasser übergießen und zugedeckt quellen lassen.|5',
+  'Falafel nach Packungsangabe in der Pfanne oder im Ofen erhitzen.|8',
+  'Gurke und Tomaten würfeln, Salat waschen.',
+  'Couscous mit einer Gabel auflockern, mit Zitronensaft, Öl und Salz würzen.',
+  'Alles in Schalen anrichten und einen großen Klecks Hummus obendrauf geben.']],
+'Ofenkartoffeln mit Hummus': [['4 große Kartoffeln','150 g Hummus','1 Paprika','1 rote Zwiebel','½ Bund Petersilie','2 EL Olivenöl, Salz, Paprikapulver'], [
+  'Ofen auf 200 °C Umluft vorheizen.|8',
+  'Kartoffeln gründlich waschen, längs halbieren, mit Öl, Salz und Paprikapulver einreiben.',
+  'Mit der Schnittfläche nach unten aufs Blech legen und backen, bis sie weich sind.|35',
+  'Währenddessen Paprika und Zwiebel fein würfeln, Petersilie hacken.',
+  'Kartoffeln anrichten, mit Hummus füllen und mit Paprika, Zwiebel und Petersilie bestreuen.']],
+'Couscous-Salat': [['150 g Couscous','½ Gurke','2 Tomaten','1 Paprika','1 Zitrone','½ Bund Petersilie','3 EL Olivenöl, Salz, Pfeffer'], [
+  'Couscous mit 150 ml kochendem, gesalzenem Wasser übergießen und zugedeckt quellen lassen.|5',
+  'Gurke, Tomaten und Paprika klein würfeln, Petersilie hacken.',
+  'Couscous auflockern und abkühlen lassen.',
+  'Mit Gemüse, Petersilie, Zitronensaft, Öl, Salz und Pfeffer mischen. Schmeckt nach etwas Ziehen noch besser.|10']],
+'Gemüsesuppe': [['2 Karotten','2 Kartoffeln','1 Stange Lauch','1 Stück Sellerie (ca. 150 g)','1 l Gemüsebrühe','1 EL Öl, Salz, Pfeffer','Petersilie'], [
+  'Gemüse schälen bzw. waschen und in kleine Würfel bzw. Ringe schneiden.',
+  'Öl im Topf erhitzen und den Lauch kurz andünsten.|3',
+  'Restliches Gemüse dazu, mit der Brühe aufgießen und aufkochen.',
+  'Bei kleiner Hitze köcheln lassen, bis alles weich ist.|25',
+  'Mit Salz, Pfeffer und gehackter Petersilie abschmecken.']],
+'Burrito-Bowl': [['150 g Reis','1 Dose Kidneybohnen','1 kleine Dose Mais','1 Avocado','2 Tomaten','1 Limette','Salz, Pfeffer, Kreuzkümmel, Paprikapulver'], [
+  'Reis kochen.|15',
+  'Bohnen und Mais abspülen, mit Kreuzkümmel, Paprikapulver und Salz in einer Pfanne erwärmen.|4',
+  'Tomaten würfeln, Avocado in Scheiben schneiden, mit Limettensaft beträufeln.',
+  'Reis mit etwas Limettensaft und Salz würzen.',
+  'Reis in Schalen geben und Bohnen-Mais-Mix, Tomaten und Avocado nebeneinander darauf anrichten.']],
+'Erdnuss-Nudeln': [['250 g Nudeln (z. B. Mie oder Spaghetti)','2 EL Erdnussbutter','3 EL Sojasoße','1 Brokkoli','2 Frühlingszwiebeln','1 TL Ahornsirup oder Zucker','Chili nach Geschmack'], [
+  'Nudeln nach Packungsangabe kochen, in den letzten 3 Minuten die Brokkoliröschen mitgaren.|8',
+  'Erdnussbutter, Sojasoße, Sirup, Chili und 4 EL heißes Nudelwasser glatt rühren.',
+  'Frühlingszwiebeln in Ringe schneiden.',
+  'Nudeln und Brokkoli abgießen, sofort mit der Soße mischen und mit Frühlingszwiebeln bestreuen.']],
+'Toast Hawaii': [['4 Scheiben Toast','4 Scheiben Kochschinken','4 Ananasscheiben (Dose)','4 Scheiben Käse','etwas Butter'], [
+  'Ofen auf 200 °C Ober-/Unterhitze vorheizen.|8',
+  'Toast dünn mit Butter bestreichen und aufs Blech legen.',
+  'Mit Schinken, abgetropfter Ananas und Käse belegen.',
+  'Backen, bis der Käse geschmolzen und leicht gebräunt ist.|10']],
+'Pilzrisotto': [['200 g Risottoreis','250 g Champignons','1 Zwiebel','800 ml heiße Gemüsebrühe','40 g Parmesan','2 EL Butter','1 EL Öl, Salz, Pfeffer'], [
+  'Pilze in Scheiben schneiden, Zwiebel fein würfeln. Brühe in einem Topf heiß halten.',
+  'Pilze in Öl kräftig anbraten, salzen und herausnehmen.|5',
+  '1 EL Butter in den Topf, Zwiebel glasig dünsten, Reis dazu und kurz glasig anschwitzen.|2',
+  'Eine Kelle Brühe dazugeben und unter Rühren einköcheln lassen. Immer wieder Brühe nachgießen, bis der Reis cremig und bissfest ist.|18',
+  'Pilze, restliche Butter und geriebenen Parmesan unterrühren, mit Salz und Pfeffer abschmecken und kurz ruhen lassen.|2']],
+'Nudelsalat': [['250 g kurze Nudeln','1 kleine Dose Mais','100 g Erbsen (TK)','1 Paprika','½ Gurke','4 EL Mayonnaise + 2 EL Joghurt','Salz, Pfeffer, 1 Schuss Essig'], [
+  'Nudeln bissfest kochen, in den letzten 2 Minuten die Erbsen mitgaren.|10',
+  'Abgießen, kalt abschrecken und gut abtropfen lassen.',
+  'Paprika und Gurke würfeln, Mais abtropfen lassen.',
+  'Mayonnaise, Joghurt, Essig, Salz und Pfeffer verrühren.',
+  'Alles mischen und im Kühlschrank durchziehen lassen.|30']]
+};
+const R = [
+  ['Spaghetti Aglio e Olio',15,1,'spaghetti,knoblauch,chili,petersilie'],
+  ['Shakshuka',25,1,'eier,tomaten (dose),paprika,zwiebel,kreuzkümmel,brot'],
+  ['Gemüse-Curry',30,1,'kokosmilch,currypaste,paprika,zucchini,reis,zwiebel'],
+  ['Chili sin Carne',40,1,'kidneybohnen,mais,tomaten (dose),zwiebel,paprika,reis'],
+  ['Chili con Carne',45,0,'hackfleisch,kidneybohnen,mais,tomaten (dose),zwiebel,paprika'],
+  ['Pfannkuchen',20,1,'mehl,eier,milch,zucker'],
+  ['Omelett mit Gemüse',12,1,'eier,paprika,zwiebel,käse'],
+  ['Bratkartoffeln mit Spiegelei',30,1,'kartoffeln,eier,zwiebel'],
+  ['Pasta Bolognese',40,0,'nudeln,hackfleisch,tomaten (dose),zwiebel,karotte,knoblauch'],
+  ['Pasta mit Tomatensoße',20,1,'nudeln,tomaten (dose),knoblauch,zwiebel,parmesan'],
+  ['Gebratener Reis',20,1,'reis,eier,erbsen,karotte,sojasoße,frühlingszwiebeln'],
+  ['Hähnchen-Pfanne',25,0,'hähnchen,paprika,zucchini,reis,sojasoße'],
+  ['Linsensuppe',35,1,'linsen,karotte,kartoffeln,zwiebel,gemüsebrühe'],
+  ['Kartoffelsuppe',35,1,'kartoffeln,karotte,lauch,gemüsebrühe,sahne'],
+  ['Wraps',15,1,'tortillas,kidneybohnen,mais,salat,käse,saure sahne'],
+  ['Flammkuchen',25,0,'flammkuchenteig,schmand,zwiebel,speck'],
+  ['Ofengemüse mit Feta',35,1,'kartoffeln,paprika,zucchini,zwiebel,feta'],
+  ['Käsespätzle',25,1,'spätzle,käse,zwiebel,butter'],
+  ['Griechischer Salat',10,1,'tomaten,gurke,feta,zwiebel,oliven'],
+  ['Lachs mit Reis & Brokkoli',25,0,'lachs,reis,brokkoli,zitrone'],
+  ['Porridge',8,1,'haferflocken,milch,banane'],
+  ['Porridge mit Haferdrink',8,1,'haferflocken,haferdrink,banane,zimt'],
+  ['Kichererbsen-Curry',30,1,'kichererbsen,kokosmilch,tomaten (dose),spinat,zwiebel,reis,currypulver'],
+  ['Linsen-Bolognese',35,1,'nudeln,rote linsen,tomaten (dose),zwiebel,karotte,knoblauch'],
+  ['Tofu-Gemüse-Pfanne',25,1,'tofu,brokkoli,paprika,sojasoße,reis,knoblauch'],
+  ['Falafel-Bowl',20,1,'falafel,couscous,gurke,tomaten,hummus,salat'],
+  ['Ofenkartoffeln mit Hummus',40,1,'kartoffeln,hummus,paprika,zwiebel,petersilie'],
+  ['Couscous-Salat',15,1,'couscous,gurke,tomaten,paprika,zitrone,petersilie'],
+  ['Gemüsesuppe',35,1,'karotte,kartoffeln,lauch,sellerie,gemüsebrühe'],
+  ['Burrito-Bowl',25,1,'reis,kidneybohnen,mais,avocado,tomaten,limette'],
+  ['Erdnuss-Nudeln',20,1,'nudeln,erdnussbutter,sojasoße,brokkoli,frühlingszwiebeln'],
+  ['Toast Hawaii',15,0,'toast,schinken,ananas,käse'],
+  ['Pilzrisotto',35,1,'risottoreis,champignons,zwiebel,gemüsebrühe,parmesan,butter'],
+  ['Nudelsalat',20,1,'nudeln,mais,erbsen,paprika,mayonnaise,gurke'],
+].map(([n,m,v,i]) => ({ id: 'b'+n.length+n.charCodeAt(0)+n.charCodeAt(2), name:n, min:m, veg:!!v, ing:i.split(','), amt: (GUIDE[n]||[])[0], steps: (GUIDE[n]||[])[1] }));
+// Tierische Zutaten: ist eine davon drin, ist das Gericht nicht vegan
+const ANIMAL = ['eier','ei','milch','käse','butter','sahne','schmand','saure sahne','parmesan','feta','honig','mayonnaise','joghurt','spätzle','quark','mozzarella','speck','schinken','hackfleisch','hähnchen','lachs','thunfisch'];
+const isVegan = r => r.diet ? r.diet === 'vegan' : r.veg && !r.ing.some(i => ANIMAL.includes(i));
+const isVeg = r => r.diet ? r.diet !== 'fleisch' : !!r.veg;
+const dietOk = r => D.diet === 'vegan' ? isVegan(r) : D.diet === 'veg' ? isVeg(r) : true;
+const avail = () => all().filter(dietOk);
+const DIET_NAME = { alle: 'Alles', veg: 'vegetarisch', vegan: 'vegan' };
+
+let D = { inv: [], plan: Array(7).fill(null), custom: [], checked: [], extra: [], diet: 'alle' };
+let tagF = '';
+const save = () => Store.set('kueche', D);
+const all = () => R.concat(D.custom);
+const norm = s => s.trim().toLowerCase();
+const has = i => BASE.includes(i) || D.inv.some(x => x === i || i.startsWith(x + ' ') || x.startsWith(i + ' '));
+const DAYS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+
+function render() {
+  $('#allIng').innerHTML = [...new Set(all().flatMap(r => r.ing))].sort().map(i => `<option value="${esc(i)}">`).join('');
+  $('#inv').innerHTML = D.inv.length ? D.inv.map(i => `<span class="chip">${esc(i)}<button data-rm="${esc(i)}" aria-label="entfernen">✕</button></span>`).join('') : '<span class="faint" style="font-size:13px">Noch leer</span>';
+
+  [...$('#diet').children].forEach(b => b.classList.toggle('on', b.dataset.d === (D.diet || 'alle')));
+  [...$('#tagF').children].forEach(b => b.classList.toggle('hide', (b.dataset.t === 'veggie' && D.diet !== 'alle') || (b.dataset.t === 'vegan' && D.diet === 'vegan')));
+  const scored = avail().filter(r => !tagF || (tagF === 'veggie' ? isVeg(r) : tagF === 'vegan' ? isVegan(r) : r.min <= 20)).map(r => {
+    const h = r.ing.filter(has).length; return { r, h, p: h / r.ing.length };
+  }).sort((a,b) => b.p - a.p || a.r.min - b.r.min);
+  $('#recs').innerHTML = scored.map(({ r, h, p }) => `<div class="rec">
+    <div class="row between"><b>${esc(r.name)}</b>${r.custom ? `<span><button class="ghost sm" data-edrec="${r.id}" title="Bearbeiten">✎</button><button class="ghost sm danger" data-delrec="${r.id}">✕</button></span>` : ''}</div>
+    <div class="row" style="gap:6px"><span class="chip">${r.min} Min</span>${isVegan(r) ? '<span class="chip" style="color:var(--good);border-color:var(--good)">vegan</span>' : isVeg(r) ? '<span class="chip">vegetarisch</span>' : ''}<span class="grow"></span><span class="match ${p===1?'good':p>=.6?'acc':'mute'}">${h}/${r.ing.length}</span></div>
+    <div class="bar"><i style="width:${p*100}%;${p===1?'background:var(--good)':''}"></i></div>
+    <div class="ing">${r.ing.map(i => `<span class="${has(i)?'have':'miss'}">${esc(i)}</span>`).join(', ')}</div>
+    <div class="acts"><button class="sm primary" data-cook="${r.id}">▶ Kochen</button><button class="sm" data-plan="${r.id}">→ Wochenplan</button></div></div>`).join('');
+
+  const td = (new Date().getDay() + 6) % 7;
+  const opts = '<option value="">—</option>' + avail().map(r => `<option value="${r.id}">${esc(r.name)}</option>`).join('');
+  $('#week').innerHTML = DAYS.map((d, i) => `<div class="day ${i===td?'today':''}"><span class="dn">${d}</span>
+    <select data-day="${i}">${opts}</select>${D.plan[i] ? `<span class="faint" style="font-size:12px">${(all().find(r=>r.id===D.plan[i])||{min:''}).min} Min</span><button class="ghost go" data-cook="${D.plan[i]}">▶ Anleitung</button>` : ''}</div>`).join('');
+  document.querySelectorAll('[data-day]').forEach(s => s.value = D.plan[s.dataset.day] || '');
+
+  // Einkaufsliste
+  const need = {};
+  D.plan.forEach(id => { const r = all().find(x => x.id === id); if (r) r.ing.forEach(i => { if (!has(i)) need[i] = (need[i]||0) + 1; }); });
+  const items = Object.entries(need).map(([i,n]) => ({ i, n })).concat(D.extra.map(i => ({ i, n: 0, extra: true })));
+  $('#shop').innerHTML = items.length ? items.map(({ i, n, extra }) => `<div class="it ${D.checked.includes(i)?'done':''}"><label><input type="checkbox" data-chk="${esc(i)}" ${D.checked.includes(i)?'checked':''}><span>${esc(i)}${n>1?` <span class="faint">×${n}</span>`:''}</span></label>${extra?`<button class="ghost sm" data-rmx="${esc(i)}">✕</button>`:''}</div>`).join('')
+    : '<div class="empty" style="padding:18px">Plane Gerichte – fehlende Zutaten landen hier</div>';
+}
+
+$('#invForm').onsubmit = e => { e.preventDefault(); $('#invIn').value.split(',').map(norm).filter(Boolean).forEach(i => { if (!D.inv.includes(i)) D.inv.push(i); }); $('#invIn').value = ''; save(); render(); };
+$('#extraForm').onsubmit = e => { e.preventDefault(); const v = $('#extraIn').value.trim(); if (v) { D.extra.push(v); $('#extraIn').value=''; save(); render(); } };
+$('#clearInv').onclick = () => { if (confirm('Vorrat leeren?')) { D.inv = []; save(); render(); } };
+$('#diet').onclick = e => { const b = e.target.closest('[data-d]'); if (!b) return; D.diet = b.dataset.d; tagF = ''; [...$('#tagF').children].forEach((x, i) => x.classList.toggle('on', i === 0));
+  const before = D.plan.filter(Boolean).length; D.plan = D.plan.map(id => { const r = all().find(x => x.id === id); return r && dietOk(r) ? id : null; });
+  const removed = before - D.plan.filter(Boolean).length; save(); render();
+  toast(`Nur noch ${D.diet === 'alle' ? 'alle Gerichte' : DIET_NAME[D.diet] + 'e Gerichte'}${removed ? ` · ${removed} unpassende aus dem Wochenplan entfernt` : ''}`); };
+$('#tagF').onclick = e => { const b = e.target.closest('button'); if (!b) return; tagF = b.dataset.t; [...$('#tagF').children].forEach(x => x.classList.toggle('on', x===b)); render(); };
+document.addEventListener('change', e => {
+  if (e.target.dataset.day !== undefined) { D.plan[e.target.dataset.day] = e.target.value || null; save(); render(); }
+  if (e.target.dataset.chk !== undefined) { const i = e.target.dataset.chk; D.checked = e.target.checked ? [...D.checked, i] : D.checked.filter(x => x !== i); save(); render(); }
+});
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const d = b.dataset;
+  if (d.rm) { D.inv = D.inv.filter(x => x !== d.rm); save(); render(); }
+  if (d.rmx) { D.extra = D.extra.filter(x => x !== d.rmx); save(); render(); }
+  if (d.edrec) { const r = D.custom.find(x => x.id === d.edrec); WB.editForm('Rezept bearbeiten', [{ k: 'name', l: 'Name', v: r.name, req: true }, { k: 'ing', l: 'Zutaten (mit Komma getrennt)', type: 'textarea', v: r.ing.join(', ') }, { k: 'amt', l: 'Mengen (eine pro Zeile)', type: 'textarea', v: (r.amt || []).join('\n') }, { k: 'steps', l: 'Anleitung (ein Schritt pro Zeile, „(10 Min)“ = Timer)', type: 'textarea', v: (r.steps || []).map(stepOut).join('\n') }, { k: 'min', l: 'Minuten', type: 'number', v: r.min }, { k: 'diet', l: 'Ernährung', type: 'select', v: r.diet || (isVegan(r) ? 'vegan' : isVeg(r) ? 'veg' : 'fleisch'), opts: [['vegan', 'vegan'], ['veg', 'vegetarisch'], ['fleisch', 'mit Fleisch oder Fisch']] }])
+    .then(v => { if (v && v !== 'delete') { Object.assign(r, { name: v.name, ing: v.ing.split(',').map(norm).filter(Boolean), min: v.min || 30, diet: v.diet, veg: v.diet !== 'fleisch', amt: lines(v.amt), steps: lines(v.steps) }); save(); render(); } }); }
+  if (d.delrec) { D.custom = D.custom.filter(r => r.id !== d.delrec); D.plan = D.plan.map(p => p === d.delrec ? null : p); save(); render(); }
+  if (d.cook) { const r = all().find(x => x.id === d.cook) || netCache[d.cook]; if (r) openCook(r); }
+  if (d.take) { const m = netCache[d.take]; if (!m) return; if (D.custom.some(c => c.src === 'mealdb:' + m.mid)) return toast('Schon übernommen');
+    D.custom.push({ ...m, id: 'c' + uid(), custom: true }); save(); render(); toast('Bei deinen Rezepten gespeichert'); }
+  if (d.plan) { const i = D.plan.indexOf(null); if (i < 0) return toast('Woche ist voll'); D.plan[i] = d.plan; save(); render(); toast(DAYS[i] + ': eingeplant'); }
+});
+$('#autoPlan').onclick = () => {
+  const ranked = avail().map(r => ({ r, p: r.ing.filter(has).length / r.ing.length + Math.random()*.25 })).sort((a,b)=>b.p-a.p).map(x=>x.r.id).filter(id => !D.plan.includes(id));
+  D.plan = D.plan.map(p => p || ranked.shift() || null);
+  save(); render(); toast('Woche gefüllt – nach Vorrat sortiert');
+};
+$('#copy').onclick = () => { const t = [...document.querySelectorAll('#shop .it:not(.done) span')].map(s => '• ' + s.textContent.trim()).join('\n'); navigator.clipboard.writeText(t).then(() => toast('Liste kopiert')).catch(() => toast('Kopieren nicht möglich')); };
+$('#addRec').onclick = () => { $('#rf').reset(); $('#recDlg').showModal(); };
+$('#recDlg').addEventListener('close', () => {
+  if ($('#recDlg').returnValue !== 'ok') return; const f = $('#rf');
+  D.custom.push({ id: 'c' + uid(), custom: true, name: f.rname.value.trim(), min: +f.min.value || 30, diet: f.veg.value, veg: f.veg.value !== 'fleisch', amt: lines(f.amt.value), steps: lines(f.steps.value), ing: f.ing.value.split(',').map(norm).filter(Boolean) });
+  save(); render();
+});
+// ---------- Kochmodus: Schritt für Schritt ----------
+const lines = t => String(t || '').split('\n').map(x => x.trim()).filter(Boolean);
+const stepParse = s => { let m = s.match(/\|(\d+)\s*$/); if (m) return { t: s.slice(0, m.index).trim(), min: +m[1] };
+  m = s.match(/\((\d+)\s*min(?:uten)?\.?\)\s*\.?$/i); if (m) return { t: s.slice(0, m.index).trim(), min: +m[1] };
+  m = s.match(/(\d+)\s*(?:–|-|bis)?\s*(\d+)?\s*(?:minuten|minutes|mins?)\b/i); return { t: s, min: m ? +(m[2] || m[1]) : 0, guess: !!m }; };
+const stepOut = s => { const p = stepParse(s); return p.min && !p.guess ? `${p.t} (${p.min} Min)` : p.t; };
+const scaleAmt = (a, f) => f === 1 || /prise|optional|nach geschmack/i.test(a) ? a : /\bEier?\b/.test(a) ? a.replace(/^\d+/, n => Math.max(1, Math.round(n * f))) : a.replace(/^(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?|^½/, (x, n1, n2) => {
+  const sc = v => { const r = Math.round(parseFloat(String(v).replace(',', '.')) * f * 4) / 4; return String(r).replace('.', ','); };
+  return x === '½' ? sc(0.5) : n2 ? sc(n1) + '–' + sc(n2) : sc(n1); });
+let C = null, tick = null, wake = null;
+function beep() { try { const a = new AudioContext(); [0, .35, .7].forEach(t => { const o = a.createOscillator(), g = a.createGain(); o.frequency.value = 880; o.connect(g); g.connect(a.destination); g.gain.setValueAtTime(.25, a.currentTime + t); g.gain.exponentialRampToValueAtTime(.001, a.currentTime + t + .3); o.start(a.currentTime + t); o.stop(a.currentTime + t + .3); }); } catch {} }
+function openCook(r) {
+  const steps = (r.steps || []).map(stepParse);
+  C = { r, steps, i: 0, por: 2, got: new Set(), all: false, end: 0, left: 0, run: false, ring: false };
+  if (!steps.length) C.all = true;
+  $('#cook').showModal(); drawCook();
+  try { navigator.wakeLock && navigator.wakeLock.request('screen').then(w => wake = w).catch(() => {}); } catch {}
+}
+function fmt(s) { s = Math.max(0, Math.ceil(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+function drawCook() {
+  const { r, steps, i } = C, base = r.por || 2, f = C.por / base, st = steps[i];
+  const amt = r.amt && r.amt.length ? r.amt : r.ing;
+  $('#cookIn').innerHTML = `<div class="ch">${r.img ? `<img src="${esc(r.img)}" alt="">` : ''}<div class="grow"><div class="label">${r.min ? r.min + ' Min · ' : ''}${isVegan(r) ? 'vegan' : isVeg(r) ? 'vegetarisch' : 'mit Fleisch/Fisch'}${r.lang === 'en' ? ' · Anleitung auf Englisch' : ''}</div><h2 style="margin:2px 0 0">${esc(r.name)}</h2></div>
+      ${steps.length ? `<button class="ghost sm" data-k="view">${C.all ? 'Schritt für Schritt' : 'Alle Schritte'}</button>` : ''}<button class="ghost sm" data-k="close" aria-label="Schließen">✕</button></div>
+    <div class="cb"><div class="ci"><div class="row between"><span class="label">Zutaten</span>${r.amt && r.amt.length ? `<span class="portions"><button class="ghost sm" data-k="pm">−</button><b>${C.por}</b> Port.<button class="ghost sm" data-k="pp">+</button></span>` : ''}</div>
+      ${amt.map((a, n) => `<label class="${C.got.has(n) ? 'got' : ''}"><input type="checkbox" data-got="${n}" ${C.got.has(n) ? 'checked' : ''}><span>${esc(r.amt && r.amt.length ? scaleAmt(a, f) : a)}</span></label>`).join('')}
+      ${r.amt && r.amt.length && C.por !== base ? '<p class="faint" style="font-size:11px">Mengen umgerechnet, Zeiten bleiben gleich.</p>' : ''}
+      ${r.srcUrl || r.yt ? `<p class="src">${r.srcUrl ? `<a href="${esc(r.srcUrl)}" target="_blank" rel="noopener noreferrer">Original-Rezept ↗</a> ` : ''}${r.yt ? `· <a href="${esc(r.yt)}" target="_blank" rel="noopener noreferrer">Video ↗</a>` : ''}</p>` : ''}</div>
+    <div class="cs">${!steps.length ? `<div class="empty">Für dieses Rezept gibt es noch keine Anleitung.${r.custom ? ' Über ✎ kannst du Schritte eintragen.' : ''}</div>` : C.all
+      ? `<div class="all"><ol>${steps.map(s => `<li>${esc(s.t)}${s.min && !s.guess ? ` <span class="chip">⏱ ${s.min} Min</span>` : ''}</li>`).join('')}</ol></div>`
+      : `<div class="dots">${steps.map((_, n) => `<i class="${n === i ? 'on' : n < i ? 'done' : ''}" data-go="${n}" title="Schritt ${n + 1}"></i>`).join('')}</div>
+      <div class="num">SCHRITT ${i + 1} VON ${steps.length}</div><div class="stxt">${esc(st.t)}</div>
+      ${st.min ? `<div class="timer ${C.ring ? 'ring' : ''}"><span>⏱</span><b id="tL">${fmt(C.run || C.left ? C.left : st.min * 60)}</b><span class="grow faint" style="font-size:13px">${C.ring ? 'Zeit ist um!' : C.run ? 'läuft …' : st.guess ? 'Zeit aus dem Text' : 'Timer'}</span>
+        <button class="sm ${C.run ? '' : 'primary'}" data-k="timer">${C.ring ? 'OK' : C.run ? 'Pause' : C.left ? 'Weiter' : 'Start'}</button>${C.left && !C.ring ? '<button class="ghost sm" data-k="treset">↺</button>' : ''}</div>` : ''}
+      <div class="row between"><button data-k="prev" ${i === 0 ? 'disabled' : ''}>← Zurück</button>${i < steps.length - 1 ? '<button class="primary" data-k="next">Weiter →</button>' : '<button class="primary" data-k="close">Fertig – guten Appetit!</button>'}</div>`}</div></div>`;
+}
+function stopTimer() { clearInterval(tick); tick = null; C.run = false; C.left = 0; C.ring = false; }
+$('#cook').addEventListener('click', e => {
+  if (e.target === $('#cook')) return $('#cook').close();
+  const b = e.target.closest('[data-k],[data-go]'); if (!b) return; const k = b.dataset.k;
+  if (b.dataset.go !== undefined) { stopTimer(); C.i = +b.dataset.go; }
+  if (k === 'close') return $('#cook').close();
+  if (k === 'view') C.all = !C.all;
+  if (k === 'pm') C.por = Math.max(1, C.por - 1); if (k === 'pp') C.por = Math.min(12, C.por + 1);
+  if (k === 'next' || k === 'prev') { if (C.run && !confirm('Der Timer läuft noch. Trotzdem weiter?')) return; stopTimer(); C.i += k === 'next' ? 1 : -1; }
+  if (k === 'treset') stopTimer();
+  if (k === 'timer') {
+    if (C.ring) stopTimer();
+    else if (C.run) { clearInterval(tick); C.run = false; C.left = (C.end - Date.now()) / 1000; }
+    else { C.left = C.left || C.steps[C.i].min * 60; C.end = Date.now() + C.left * 1000; C.run = true;
+      try { Notification && Notification.permission === 'default' && Notification.requestPermission(); } catch {}
+      tick = setInterval(() => { C.left = (C.end - Date.now()) / 1000; const el = document.getElementById('tL'); if (el) el.textContent = fmt(C.left);
+        if (C.left <= 0) { clearInterval(tick); C.run = false; C.ring = true; C.left = 0; beep(); try { if (document.hidden && Notification.permission === 'granted') new Notification('Küche: Zeit ist um', { body: C.steps[C.i].t.slice(0, 90) }); } catch {} drawCook(); } }, 250); }
+  }
+  drawCook();
+});
+$('#cook').addEventListener('change', e => { const n = e.target.dataset.got; if (n === undefined) return; e.target.checked ? C.got.add(+n) : C.got.delete(+n); drawCook(); });
+$('#cook').addEventListener('close', () => { if (C) stopTimer(); try { wake && wake.release(); } catch {} wake = null; });
+document.addEventListener('keydown', e => { if (!$('#cook').open || C.all || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowRight' && C.i < C.steps.length - 1) { stopTimer(); C.i++; drawCook(); } if (e.key === 'ArrowLeft' && C.i > 0) { stopTimer(); C.i--; drawCook(); } });
+
+// ---------- Rezepte aus dem Netz ----------
+const netCache = {};
+const ANIMAL_EN = /\b(egg|eggs|milk|cheese|butter|cream|yogh?urt|honey|parmesan|feta|mozzarella|cheddar|ricotta|mayonnaise)\b/i;
+async function searchNet(q) {
+  $('#net').innerHTML = '<div class="empty" style="grid-column:1/-1">Suche Rezepte …</div>'; $('#netInfo').textContent = '';
+  try {
+    const j = await WB.api('/api/rezepte?' + new URLSearchParams({ q, diet: D.diet || 'alle' }));
+    const ms = j.meals.map(m => { const r = { mid: m.id, id: 'n' + m.id, name: m.name, min: 0, lang: 'en', img: m.img, srcUrl: m.src, yt: m.yt, src: 'mealdb:' + m.id,
+      diet: m.cat === 'Vegan' ? 'vegan' : m.cat === 'Vegetarian' ? 'veg' : 'fleisch', ing: m.ing.map(x => x.i.toLowerCase()), amt: m.ing.map(x => (x.m ? x.m + ' ' : '') + x.i), steps: m.steps, por: 0, cat: m.cat, area: m.area };
+      if (r.diet === 'veg' && !r.ing.some(i => ANIMAL_EN.test(i))) r.diet = 'vegan'; r.veg = r.diet !== 'fleisch';
+      const tm = m.steps.join(' ').match(/(\d+)\s*(?:minutes|mins)/gi); r.min = tm ? Math.min(180, tm.reduce((a, x) => a + parseInt(x), 0)) : 0;
+      netCache[r.id] = r; return r; });
+    $('#netInfo').textContent = ms.length ? `${ms.length} Treffer${D.diet !== 'alle' ? ' · nur ' + DIET_NAME[D.diet] : ''}` : '';
+    $('#net').innerHTML = ms.length ? ms.map(r => `<div class="rec">${r.img ? `<img src="${esc(r.img)}/medium" alt="" loading="lazy" onerror="this.src='${esc(r.img)}'">` : ''}
+      <b>${esc(r.name)}</b><div class="row" style="gap:6px">${r.diet === 'vegan' ? '<span class="chip" style="color:var(--good);border-color:var(--good)">vegan</span>' : r.diet === 'veg' ? '<span class="chip">vegetarisch</span>' : ''}${r.area && r.area !== 'Unknown' ? `<span class="chip">${esc(r.area)}</span>` : ''}<span class="chip">${r.steps.length} Schritte</span></div>
+      <div class="acts"><button class="sm primary" data-cook="${r.id}">▶ Anleitung</button><button class="sm" data-take="${r.id}">Übernehmen</button></div></div>`).join('')
+      : `<div class="empty" style="grid-column:1/-1">Nichts gefunden${q ? ' für „' + esc(q) + '“' : ''}. Englische Begriffe finden oft mehr (z. B. „pumpkin“ statt „Kürbis“).</div>`;
+  } catch (e) { $('#net').innerHTML = `<div class="empty" style="grid-column:1/-1">Rezept-Suche gerade nicht erreichbar (${esc(e.message || 'Fehler')})</div>`; }
+}
+$('#netForm').onsubmit = e => { e.preventDefault(); searchNet($('#netIn').value.trim()); };
+
+(async () => { D = Object.assign(D, await Store.get('kueche', D)); render(); })();
+</script>
+</body></html>

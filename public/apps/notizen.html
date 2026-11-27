@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Notizen</title>
+<style>
+  .nl { width:100%; text-align:left; justify-content:flex-start; flex-direction:column; align-items:flex-start; gap:2px; padding:10px 12px; white-space:normal; background:transparent; border-color: transparent; }
+  .nl.on { background: var(--bg3); border-color: var(--line2); }
+  .nl .pv { font-size:12px; color: var(--mute); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; font-weight:400; }
+  .editor { display:grid; grid-template-columns: 1fr 1fr; gap: 14px; min-height: 64vh; }
+  .editor textarea { min-height: 64vh; font: 14px/1.65 var(--f-mono); border: 0; background: transparent; padding: 0; resize: none; }
+  .md { line-height: 1.7; overflow:auto; } .md h1 { font-size: 26px; margin: 0 0 10px; } .md h2 { font-size: 20px; margin: 18px 0 8px; } .md h3 { margin: 14px 0 6px; }
+  .md p { margin: 0 0 10px; } .md ul { padding-left: 20px; margin: 0 0 10px; } .md code { font: 13px var(--f-mono); background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
+  .md pre { font: 13px/1.55 var(--f-mono); background: var(--bg); border: 1px solid var(--line); padding: 12px; border-radius: var(--r-sm); overflow: auto; }
+  .md blockquote { border-left: 3px solid var(--acc); margin: 0 0 10px; padding: 2px 12px; color: var(--mute); }
+  .md li.task { list-style: none; margin-left: -20px; } .md a { color: var(--acc); }
+  .title { font: 600 22px var(--f-display); border: 0; background: transparent; padding: 0; }
+  @media (max-width: 900px) { .editor { grid-template-columns: 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">13 · Werkzeug</div><h1>Notizen</h1><p>Markdown links, Vorschau rechts. Checklisten mit <code>- [ ]</code> lassen sich in der Vorschau abhaken. <span class="kbd">Strg</span>+<span class="kbd">K</span> sucht.</p></div>
+    <button class="primary" id="new">+ Notiz</button>
+  </div>
+  <div class="side">
+    <div class="panel tight stack"><input id="q" placeholder="Suchen …"><div id="list"></div></div>
+    <div class="panel" id="ed"></div>
+  </div>
+</main>
+<script>
+WB.header('notizen');
+const { $, esc, uid, Store, toast } = WB;
+let D = { notes: [], sel: null }, q = '';
+const save = () => Store.set('notizen', D);
+const cur = () => D.notes.find(n => n.id === D.sel);
+function md(s) {
+  const blocks = []; s = s.replace(/```(\w*)\n([\s\S]*?)```/g, (_, l, c) => { blocks.push(`<pre>${esc(c)}</pre>`); return `\u0000${blocks.length-1}\u0000`; });
+  let li = 0;
+  const inline = t => esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\*([^*]+)\*/g, '<i>$1</i>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  const out = []; let list = false;
+  for (const line of s.split('\n')) {
+    const m = line.match(/^\s*[-*] (\[( |x)\] )?(.*)$/i);
+    if (m) { if (!list) { out.push('<ul>'); list = true; }
+      out.push(m[1] ? `<li class="task"><label><input type="checkbox" data-li="${li++}" ${m[2].toLowerCase()==='x'?'checked':''}> ${m[2].toLowerCase()==='x' ? '<s class="faint">'+inline(m[3])+'</s>' : inline(m[3])}</label></li>` : `<li>${inline(m[3])}</li>`); continue; }
+    if (list) { out.push('</ul>'); list = false; }
+    if (/^\u0000\d+\u0000$/.test(line)) { out.push(blocks[+line.slice(1,-1)]); continue; }
+    const h = line.match(/^(#{1,3}) (.*)/); if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+    if (line.startsWith('> ')) { out.push(`<blockquote>${inline(line.slice(2))}</blockquote>`); continue; }
+    if (line.trim() === '---') { out.push('<hr>'); continue; }
+    if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (list) out.push('</ul>'); return out.join('');
+}
+function renderList() {
+  const l = D.notes.filter(n => !q || (n.t + n.b).toLowerCase().includes(q)).sort((a,b) => (b.pin|0) - (a.pin|0) || b.u - a.u);
+  $('#list').innerHTML = l.length ? l.map(n => `<button class="nl ${n.id===D.sel?'on':''}" data-n="${n.id}"><span>${n.pin?'<span class="acc">● </span>':''}${esc(n.t || 'Ohne Titel')}</span><span class="pv">${esc(n.b.replace(/[#*`>\-\[\]]/g,'').slice(0,120))}</span><span class="faint mono" style="font-size:11px">${new Date(n.u).toLocaleDateString('de-DE')}</span></button>`).join('') : '<div class="faint" style="padding:12px;font-size:13px">Nichts gefunden</div>';
+}
+function renderEd() {
+  const n = cur(); if (!n) { $('#ed').innerHTML = '<div class="empty" style="padding:80px 10px">Leg eine Notiz an oder wähl eine aus.</div>'; return; }
+  $('#ed').innerHTML = `<div class="row" style="margin-bottom:12px"><input class="title grow" id="t" value="${esc(n.t)}" placeholder="Titel"><button class="sm ${n.pin?'primary':''}" id="pin">${n.pin?'Angeheftet':'Anheften'}</button><button class="sm" id="dl">.md</button><button class="sm ghost danger" id="del">Löschen</button></div>
+    <div class="editor"><textarea id="b" spellcheck="false" placeholder="# Überschrift&#10;&#10;- [ ] Aufgabe&#10;**fett**, *kursiv*, \`code\`">${esc(n.b)}</textarea><div class="md sunk" id="pv"></div></div>`;
+  $('#pv').innerHTML = md(n.b);
+  $('#t').oninput = e => { n.t = e.target.value; n.u = Date.now(); save(); renderList(); };
+  $('#b').oninput = e => { n.b = e.target.value; n.u = Date.now(); $('#pv').innerHTML = md(n.b); save(); renderList(); };
+  $('#pin').onclick = () => { n.pin = !n.pin; save(); renderList(); renderEd(); };
+  $('#dl').onclick = () => WB.download((n.t || 'notiz') + '.md', n.b, 'text/markdown');
+  $('#del').onclick = () => { if (confirm('Notiz löschen?')) { D.notes = D.notes.filter(x => x !== n); D.sel = D.notes[0]?.id; save(); renderList(); renderEd(); } };
+  $('#pv').onchange = e => { const i = +e.target.dataset.li; let k = -1;
+    n.b = n.b.split('\n').map(l => { if (/^\s*[-*] \[( |x)\] /i.test(l)) { k++; if (k === i) return l.replace(/\[( |x)\]/i, e.target.checked ? '[x]' : '[ ]'); } return l; }).join('\n');
+    n.u = Date.now(); $('#b').value = n.b; $('#pv').innerHTML = md(n.b); save(); };
+}
+$('#list').onclick = e => { const b = e.target.closest('[data-n]'); if (b) { D.sel = b.dataset.n; save(); renderList(); renderEd(); } };
+$('#new').onclick = () => { const n = { id: uid(), t: '', b: '', u: Date.now() }; D.notes.push(n); D.sel = n.id; save(); renderList(); renderEd(); $('#t').focus(); };
+$('#q').oninput = e => { q = e.target.value.toLowerCase(); renderList(); };
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); $('#q').focus(); } });
+(async () => { D = Object.assign(D, await Store.get('notizen', D));
+  if (!D.notes.length) { D.notes.push({ id: uid(), t: 'Willkommen', u: Date.now(), b: '# Notizen\n\nSchreib links, die Vorschau rechts aktualisiert sich.\n\n- [ ] Erste Aufgabe abhaken\n- [x] Werkbank installiert\n\n```\ncode bleibt, wie er ist\n```\n\n> Zitate gehen auch.' }); D.sel = D.notes[0].id; }
+  renderList(); renderEd(); })();
+</script>
+</body></html>

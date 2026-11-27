@@ -1,0 +1,42 @@
+# Grundsatz: ALLES ist gesperrt. Nur die unten aufgezählten Quelldateien dürfen ins Git.
+# So landen neue Sicherungen, Statusdaten, Notizen oder Schlüssel nie versehentlich auf GitHub.
+# Neue Datei soll mit? Dann hier eine Zeile mit ! ergänzen.
+*
+!*/
+
+# Projektdateien im Hauptordner
+!/.gitignore
+!/.dockerignore
+!/.env.example
+!/Dockerfile
+!/docker-compose.yml
+!/Caddyfile
+!/README.md
+!/server.js
+!/jellyfin.js
+!/start.sh
+!/stop.sh
+!/sichern.sh
+!/hochladen.sh
+!/start.bat
+!/stop.bat
+!/sichern.bat
+
+# Website und Sammler-Skript
+!/public/**/*.html
+!/public/**/*.css
+!/public/**/*.js
+!/public/**/*.svg
+!/public/favicon.ico
+!/host/*.py
+
+# Bleiben immer draußen, auch wenn oben etwas passen würde
+.env
+data/
+status/
+Kontext.md
+Claude outputs/
+*.tgz
+*.zip
+*.pem
+*.key

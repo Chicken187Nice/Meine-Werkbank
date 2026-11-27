@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>System</title>
+<style>
+  .gauge { text-align:center; } .gauge .ring { --p: 0; width: 130px; height: 130px; margin: 8px auto 10px; border-radius: 50%; background: conic-gradient(var(--c, var(--acc)) calc(var(--p) * 1%), var(--bg3) 0); display:grid; place-items:center; }
+  .gauge .ring span { width: 104px; height: 104px; border-radius: 50%; background: var(--bg2); display:grid; place-items:center; font: 700 26px var(--f-mono); }
+  .chart { display:flex; align-items:end; gap: 2px; height: 120px; }
+  .chart div { flex: 1; display:flex; flex-direction: column; justify-content: end; gap: 1px; height: 100%; }
+  .chart i { display:block; border-radius: 2px 2px 0 0; min-height: 1px; }
+  .kv { display:grid; grid-template-columns: 180px 1fr; gap: 8px 16px; font-size: 14px; } .kv span:nth-child(odd) { color: var(--mute); }
+  @media (max-width: 600px) { .kv { grid-template-columns: 1fr; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>System</h1><p>Auslastung der Umgebung, in der die Werkbank läuft: Docker auf deinem Laptop. Werte alle 30 Sekunden, Verlauf der letzten Stunde. Wird es knapp, kommt ein Hinweis auf die Startseite.</p></div>
+    <span class="mute" id="upd" style="font-size:12px"></span>
+  </div>
+  <div class="g4" id="gauges"></div>
+  <div class="side" style="margin-top:14px">
+    <div class="panel"><div class="label" style="margin-bottom:12px">Details</div><div class="kv" id="kv"></div></div>
+    <div class="panel"><div class="row between" style="margin-bottom:12px"><span class="label">Verlauf</span><span class="row" style="gap:12px;font-size:12px"><span class="row" style="gap:6px"><span class="dot"></span>CPU</span><span class="row" style="gap:6px"><span class="dot" style="background:#5aa9ff"></span>RAM</span></span></div><div class="chart" id="chart"></div>
+      <div id="warn" style="margin-top:12px"></div></div>
+  </div>
+</main>
+<script>
+WB.header('system');
+const { $, esc, api } = WB;
+const gb = b => (b / 1073741824).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' GB';
+const mb = b => b < 1048576 ? Math.round(b / 1024) + ' KB' : (b / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' MB';
+const dur = s => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return (d ? d + ' T ' : '') + (h ? h + ' Std ' : '') + m + ' Min'; };
+const col = p => p > 90 ? 'var(--bad)' : p > 75 ? 'var(--warn)' : 'var(--acc)';
+function gauge(label, p, sub) { return `<div class="panel gauge"><div class="label">${label}</div><div class="ring" style="--p:${p};--c:${col(p)}"><span>${p}%</span></div><div class="mute" style="font-size:12px">${sub}</div></div>`; }
+async function load() {
+  const S = await api('/api/system'); const last = S.hist[S.hist.length - 1] || { cpu: Math.min(100, Math.round(S.load[0] / S.cpus * 100)) };
+  const memP = Math.round((1 - S.mem.free / S.mem.total) * 100), diskP = S.disk ? Math.round((1 - S.disk.free / S.disk.total) * 100) : 0;
+  $('#gauges').innerHTML = gauge('CPU', last.cpu, `${S.cpus} Kerne · Last ${S.load[0].toFixed(2)}`) + gauge('Arbeitsspeicher', memP, `${gb(S.mem.total - S.mem.free)} von ${gb(S.mem.total)}`)
+    + gauge('Speicher (Docker)', diskP, S.disk ? `${gb(S.disk.free)} frei` : 'unbekannt') + `<div class="panel stat"><div class="label">Werkbank-Daten</div><div class="v acc">${mb(S.dataSize)}</div><div class="s">${S.users} Nutzer · ${S.sessions} Sitzungen</div><div class="s">läuft seit ${dur(S.appUptime)}</div></div>`;
+  $('#kv').innerHTML = [['Rechnername', S.host], ['System', S.platform], ['Prozessor', S.cpuModel], ['Node.js', S.node], ['System läuft seit', dur(S.uptime)], ['Werkbank gestartet', new Date(S.started).toLocaleString('de-DE')]].map(([k, v]) => `<span>${k}</span><span class="mono">${esc(v)}</span>`).join('');
+  $('#chart').innerHTML = S.hist.length ? S.hist.map(h => `<div title="${new Date(h.t).toLocaleTimeString('de-DE')}: CPU ${h.cpu}% · RAM ${h.mem}%"><i style="height:${h.cpu}%;background:var(--acc)"></i></div>`).join('') + '' : '<div class="faint" style="margin:auto;font-size:13px">Verlauf sammelt sich in den nächsten Minuten</div>';
+  if (S.hist.length) $('#chart').innerHTML = S.hist.map(h => `<div title="${new Date(h.t).toLocaleTimeString('de-DE')}: CPU ${h.cpu}% · RAM ${h.mem}%" style="flex-direction:row;align-items:end;gap:1px"><i style="flex:1;height:${Math.max(1, h.cpu)}%;background:var(--acc)"></i><i style="flex:1;height:${h.mem}%;background:#5aa9ff;opacity:.7"></i></div>`).join('');
+  $('#warn').innerHTML = S.warnings.length ? S.warnings.map(w => `<div class="bad" style="font-size:14px">⚠ ${esc(w)}</div>`).join('') : '<div class="good" style="font-size:13px">✓ Alles im grünen Bereich</div>';
+  $('#upd').textContent = 'Stand ' + new Date().toLocaleTimeString('de-DE');
+}
+load(); setInterval(load, 30000);
+</script>
+</body></html>

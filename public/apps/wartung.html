@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Updates &amp; Backups</title>
+<style>
+  .pk { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; } code { font-family:var(--f-mono); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:2px 7px; }
+  .disk { padding:10px 0; border-bottom:1px solid var(--line); } .disk:last-child { border:0; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>Updates &amp; Backups</h1><p>Was auf dem Server ansteht. Die Seite zeigt nur an und installiert nichts.</p></div>
+    <span class="mute" id="upd" style="font-size:12px"></span>
+  </div>
+  <div id="warn" class="stack"></div>
+  <div class="g3" id="kpi" style="margin-top:14px"></div>
+  <div class="g2" style="margin-top:14px">
+    <div class="panel"><div class="panel-h"><span class="label">Updates</span></div><div id="apt"></div></div>
+    <div class="stack">
+      <div class="panel"><div class="panel-h"><span class="label">Speicherplatz</span></div><div id="disks"></div></div>
+      <div class="panel"><div class="panel-h"><span class="label">Werkbank-Sicherungen</span></div><div id="backups"></div>
+        <p class="mute" style="font-size:12px;margin-top:12px">Neue Sicherung auf dem Server: <code>cd ~/docker/werkbank &amp;&amp; bash sichern.sh</code><br>Die Datei enthält Passwort-Hashes und 2FA-Schlüssel. Bewahre eine Kopie sicher außerhalb des Servers auf.</p></div>
+    </div>
+  </div>
+</main>
+<script>
+WB.header('wartung');
+const { $, esc, api } = WB;
+const size = b => b < 1048576 ? Math.max(1, Math.round(b / 1024)) + ' KB' : b < 1073741824 ? (b / 1048576).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' MB' : (b / 1073741824).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' GB';
+const when = t => t ? new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'unbekannt';
+const stat = (l, v, s, cls = '') => `<div class="panel stat"><div class="label">${l}</div><div class="v ${cls}">${v}</div><div class="s">${s}</div></div>`;
+async function load() {
+  const d = await api('/api/wartung');
+  $('#warn').innerHTML = d.warnings.length ? d.warnings.map(w => `<div class="panel"><b class="${w.bad ? 'bad' : ''}">⚠ ${esc(w.text)}</b> <span class="mute">· ${esc(w.sub)}</span></div>`).join('') : '<div class="panel good">✓ Alles in Ordnung</div>';
+  if (d.missing) { $('#kpi').innerHTML = $('#apt').innerHTML = $('#disks').innerHTML = $('#backups').innerHTML = ''; return; }
+  const a = d.apt || {}, b = d.backups[0], root = d.disks.find(x => x.mount === '/') || d.disks[0], age = b ? Math.floor((Date.now() - b.t) / 864e5) : null;
+  $('#kpi').innerHTML = stat('Updates', a.count ?? '?', a.security ? `${a.security} davon sicherheitsrelevant` : 'keine Sicherheitsupdates', a.security ? 'bad' : '')
+    + stat('Letzte Sicherung', b ? (age ? `vor ${age} T` : 'heute') : 'keine', b ? when(b.t) : `Hinweis ab ${d.backupDays} Tagen`, !b || Date.now() - b.t > d.backupDays * 864e5 ? 'bad' : 'good')
+    + stat('Platte ' + esc(root?.mount || ''), root ? root.percent + ' %' : '?', root ? size(root.free) + ' frei' : '', root && root.percent >= d.diskWarn ? 'bad' : '');
+  $('#apt').innerHTML = (d.reboot ? `<p class="bad" style="font-size:14px;margin-bottom:10px">↻ Neustart nötig seit ${when(d.reboot.since)}${d.reboot.pkgs.length ? ': ' + esc(d.reboot.pkgs.join(', ')) : ''}</p>` : '')
+    + (a.error ? `<p class="bad">${esc(a.error)}</p>` : a.count ? `<p style="font-size:14px">Installieren auf dem Server: <code>sudo apt update &amp;&amp; sudo apt upgrade</code></p><div class="pk">${a.names.map((n, i) => `<span class="chip ${i < a.security ? 'bad' : ''}" ${i < a.security ? 'title="Sicherheitsupdate"' : ''}>${i < a.security ? '⚠ ' : ''}${esc(n)}</span>`).join('')}${a.count > a.names.length ? `<span class="chip">+ ${a.count - a.names.length} weitere</span>` : ''}</div>` : '<div class="empty">Keine Updates offen</div>')
+    + `<p class="mute" style="font-size:12px;margin-top:12px">Paketliste zuletzt aktualisiert: ${when(a.listFrom)}</p>`;
+  $('#disks').innerHTML = d.disks.map(x => `<div class="disk"><div class="row between"><span class="mono">${esc(x.mount)}</span><span class="mono ${x.percent >= d.diskWarn ? 'bad' : 'mute'}">${x.percent} % · ${size(x.free)} frei von ${size(x.total)}</span></div><div class="bar" style="margin-top:8px"><i style="width:${x.percent}%;${x.percent >= d.diskWarn ? 'background:var(--bad)' : ''}"></i></div></div>`).join('');
+  $('#backups').innerHTML = d.backups.length ? `<div class="list">${d.backups.map(x => `<div class="it"><span class="grow mono">${esc(x.name)}</span><span class="mute" style="font-size:12px">${size(x.size)} · ${when(x.t)}</span></div>`).join('')}</div>` : '<div class="empty">Noch keine Sicherung gefunden</div>';
+  $('#upd').textContent = 'Stand ' + new Date(d.t).toLocaleTimeString('de-DE');
+}
+const safe = () => load().catch(e => $('#warn').textContent = e.message);
+safe(); setInterval(() => { if (!document.hidden) safe(); }, 60000);
+</script>
+</body></html>

@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Lern-Trainer C#</title>
+<style>
+  pre { font: 13px/1.55 var(--f-mono); background: var(--bg); border:1px solid var(--line); border-radius: var(--r-sm); padding: 12px 14px; overflow:auto; margin: 10px 0 0; text-align:left; white-space: pre; }
+  code { font: 13px var(--f-mono); background: var(--bg3); padding: 1px 5px; border-radius: 4px; }
+  pre .k { color: var(--acc); } pre .c { color: var(--faint); font-style: italic; } pre .s { color: var(--good); }
+  .card { min-height: 320px; display:flex; flex-direction:column; justify-content:center; padding: 30px; text-align:center; cursor:pointer; position:relative; }
+  .card .q { font: 600 22px/1.35 var(--f-display); max-width: 640px; margin: 0 auto; }
+  .card .a { margin: 18px auto 0; max-width: 680px; text-align:left; font-size:15px; }
+  .card .hint { position:absolute; bottom:14px; left:0; right:0; font-size:12px; color: var(--faint); }
+  .boxes { display:grid; grid-template-columns: repeat(5,1fr); gap:6px; }
+  .boxes div { border:1px solid var(--line); border-radius:8px; padding:8px; text-align:center; background: var(--bg); }
+  .boxes b { display:block; font: 700 18px var(--f-mono); }
+  .opt { display:block; width:100%; text-align:left; justify-content:flex-start; padding: 12px 14px; margin-top:8px; font-weight:500; white-space: normal; }
+  .opt.right { border-color: var(--good); background: color-mix(in srgb, var(--good) 15%, var(--bg3)); }
+  .opt.wrong { border-color: var(--bad); background: color-mix(in srgb, var(--bad) 15%, var(--bg3)); }
+  .cmp td { vertical-align: top; } .cmp td code { white-space: pre-wrap; background: none; padding: 0; }
+  .cmp td:first-child { color: var(--mute); }
+  .deck { text-align:left; justify-content:flex-start; flex-direction:column; align-items:flex-start; width:100%; padding:12px 14px; gap:4px; white-space: normal; }
+  .deck.on { border-color: var(--acc); box-shadow: inset 3px 0 0 var(--acc); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">05 · Lernen</div><h1>C# für Java-Entwickler</h1><p>Du kennst Java, also lernst du C# über die Unterschiede. Karteikarten mit Wiederholungs-System, ein Quiz, ein Spickzettel Java ↔ C# und Übersetzungsaufgaben.</p></div>
+    <div class="tabs" id="modes"><button class="on" data-m="karten">Karteikarten</button><button data-m="quiz">Quiz</button><button data-m="uebung">Übersetzen</button><button data-m="spick">Spickzettel</button></div>
+  </div>
+
+  <section id="m-karten" class="side">
+    <div class="stack">
+      <div class="panel"><div class="panel-h"><span class="label">Stapel</span></div><div class="stack" id="decks"></div></div>
+      <div class="panel"><div class="panel-h"><span class="label">Fächer (Leitner)</span><button class="sm ghost" id="reset">zurücksetzen</button></div><div class="boxes" id="boxes"></div>
+        <p class="faint" style="font-size:12px;margin-top:10px">Gewusst → ein Fach weiter, die Karte kommt erst später wieder (1, 3, 7, 14 Tage). Nicht gewusst → zurück in Fach 1.</p></div>
+      <form class="panel stack" id="addCard"><div class="label">Eigene Karte</div>
+        <input name="cq" placeholder="Frage" required><textarea name="ca" placeholder="Antwort" required style="min-height:60px"></textarea><textarea name="cc" placeholder="Code (optional)" style="min-height:60px;font-family:var(--f-mono);font-size:13px"></textarea><button>Hinzufügen</button></form>
+    </div>
+    <div class="stack">
+      <div class="panel card" id="card"></div>
+      <div class="row" style="justify-content:center" id="rate"></div>
+    </div>
+  </section>
+
+  <section id="m-quiz" class="hide"><div class="panel" style="max-width:760px;margin:0 auto" id="quiz"></div></section>
+  <section id="m-uebung" class="hide"><div class="stack" id="ueb"></div></section>
+  <section id="m-spick" class="hide"><div class="panel scroll"><table class="t cmp" id="spick"></table></div></section>
+</main>
+
+<script>
+WB.header('lernen');
+const { $, $$, esc, uid, today, ymd, Store, toast } = WB;
+
+// ---------- Inhalte ----------
+const DECKS = {
+  diff: { name: 'Java → C#: die Unterschiede', cards: [
+    ['Wie vergleicht man Strings in C#, und was macht == dabei?', 'In C# vergleicht == bei string den Inhalt (der Operator ist überladen). In Java vergleicht == nur die Referenz, dort brauchst du equals().', 'string a = "Hallo";\nstring b = new string("Hallo".ToCharArray());\nConsole.WriteLine(a == b);  // True'],
+    ['Was nutzt C# statt Getter- und Setter-Methoden?', 'Properties. Von außen sehen sie aus wie Felder, intern sind es Methoden. Die Auto-Property erzeugt das Feld automatisch.', 'public class Person\n{\n    public string Name { get; set; }\n    public int Alter { get; private set; }\n    public bool IstVolljaehrig => Alter >= 18;\n}'],
+    ['Was entspricht package und import?', 'namespace und using. Ordnerstruktur und Namespace müssen nicht übereinstimmen (sollten aber).', 'using System.Text;\n\nnamespace Werkbank.Lernen;  // file-scoped namespace (C# 10)'],
+    ['Wie schreibt man extends und implements?', 'Beides mit Doppelpunkt: Basisklasse zuerst, danach Interfaces. Den Basiskonstruktor ruft man mit : base(...) statt super(...) auf.', 'class Hund : Tier, IHaustier\n{\n    public Hund(string name) : base(name) { }\n}'],
+    ['Warum lässt sich eine Methode in C# nicht einfach überschreiben?', 'Methoden sind in C# standardmäßig nicht virtuell (in Java schon). Die Basis braucht virtual oder abstract, die Unterklasse override.', 'class Tier { public virtual string Laut() => "..."; }\nclass Katze : Tier { public override string Laut() => "Miau"; }'],
+    ['Was entspricht final?', 'Klasse: sealed. Feld: readonly (einmal im Konstruktor setzbar) oder const (Kompilierzeit-Konstante, implizit static).', 'sealed class Konfig\n{\n    public const int MaxNutzer = 10;\n    private readonly string _pfad;\n    public Konfig(string p) { _pfad = p; }\n}'],
+    ['Wie heißen ArrayList und HashMap?', 'List<T> und Dictionary<TKey, TValue> aus System.Collections.Generic.', 'var namen = new List<string> { "Ana", "Ben" };\nvar alter = new Dictionary<string, int>();\nalter["Ana"] = 17;\nif (alter.TryGetValue("Ben", out int a)) { }'],
+    ['Was ist anders an Generics in C#?', 'Kein Type Erasure: Generics sind zur Laufzeit echt (reifiziert). List<int> ohne Boxing, typeof(T) funktioniert. Einschränkungen schreibt man mit where.', 'T Max<T>(T a, T b) where T : IComparable<T>\n    => a.CompareTo(b) >= 0 ? a : b;'],
+    ['Wie heißt die erweiterte for-Schleife?', 'foreach mit in statt Doppelpunkt.', 'foreach (var name in namen)\n{\n    Console.WriteLine(name);\n}'],
+    ['Gibt es checked Exceptions und throws?', 'Nein. C# kennt nur ungeprüfte Exceptions, ein throws in der Signatur gibt es nicht. try/catch/finally funktionieren wie in Java.', 'try { int.Parse("abc"); }\ncatch (FormatException ex) { Console.WriteLine(ex.Message); }\nfinally { /* immer */ }'],
+    ['Was ersetzt try-with-resources?', 'using: Am Ende des Blocks bzw. Scopes wird Dispose() aufgerufen (IDisposable ≈ AutoCloseable).', 'using var reader = new StreamReader("daten.txt");\nstring zeile = reader.ReadLine();\n// reader.Dispose() am Ende des Scopes'],
+    ['Wie sehen Lambdas und funktionale Interfaces aus?', 'Der Pfeil ist => statt ->. Statt Function/Consumer/Predicate nutzt man die Delegates Func<…>, Action<…> und Predicate<T>.', 'Func<int, int> doppelt = x => x * 2;\nAction<string> gruss = n => Console.WriteLine($"Hi {n}");\nPredicate<int> gerade = x => x % 2 == 0;'],
+    ['Was entspricht der Stream-API?', 'LINQ. Ähnliche Idee, die Methoden heißen anders: filter→Where, map→Select, collect→ToList.', 'var namen = personen\n    .Where(p => p.Alter >= 18)\n    .OrderBy(p => p.Name)\n    .Select(p => p.Name)\n    .ToList();'],
+    ['Wie gibst du etwas aus, und wie baust du Strings zusammen?', 'Console.WriteLine. Statt Konkatenation oder String.format gibt es String-Interpolation mit $.', 'string name = "Lea";\nConsole.WriteLine($"Hallo {name}, du bist {alter} Jahre alt.");\nConsole.WriteLine($"Preis: {preis:F2} €");'],
+    ['Was ist ein struct?', 'Ein Werttyp: Er wird bei jeder Zuweisung kopiert und liegt inline (oft auf dem Stack). class ist ein Referenztyp wie in Java.', 'struct Punkt { public int X; public int Y; }\nvar a = new Punkt { X = 1 };\nvar b = a; b.X = 9;\n// a.X ist immer noch 1'],
+    ['Wie geht C# mit null um?', 'int? macht einen Werttyp nullbar. Mit Nullable Reference Types markiert string? „darf null sein“. Dazu gibt es ?. (null-sicherer Zugriff) und ?? (Ersatzwert).', 'int? zahl = null;\nint wert = zahl ?? 0;\nstring? name = person?.Name;\nint laenge = name?.Length ?? 0;'],
+    ['Wo ist die main-Methode?', 'static void Main(string[] args), groß geschrieben. Seit C# 9 reichen Top-Level-Statements: Der Code steht direkt in Program.cs.', '// Program.cs – das ist das ganze Programm:\nConsole.WriteLine("Hallo Welt!");'],
+    ['Welche Sichtbarkeit gilt standardmäßig?', 'Member: private. Klassen: internal (sichtbar in der ganzen Assembly). protected heißt in C# nur Unterklassen, nicht wie in Java auch das Package.', 'class A          // internal\n{\n    int x;       // private\n    protected internal int y;  // Unterklasse ODER Assembly\n}'],
+    ['Wie funktionieren records und Kopien mit Änderung?', 'record (C# 9) ähnelt Java-Records. Neu ist der with-Ausdruck für eine veränderte Kopie.', 'public record Punkt(int X, int Y);\n\nvar p1 = new Punkt(1, 2);\nvar p2 = p1 with { X = 5 };   // Punkt { X = 5, Y = 2 }'],
+    ['Was sind out und ref?', 'Parameter, die per Referenz übergeben werden. Mit out liefert eine Methode zusätzliche Werte zurück, das typische Muster dafür ist TryParse.', 'if (int.TryParse("42", out int n))\n    Console.WriteLine(n + 1);\n\nvoid Tausche(ref int a, ref int b) => (a, b) = (b, a);'],
+    ['Was sind Extension Methods?', 'Statische Methoden, die sich wie Instanzmethoden aufrufen lassen: Sie stehen in einer static class, der erste Parameter hat this davor.', 'static class StringExt\n{\n    public static bool IstLeer(this string s) => string.IsNullOrWhiteSpace(s);\n}\n// "  ".IstLeer() → true'],
+    ['Was ist das Gegenstück zu CompletableFuture?', 'Task bzw. Task<T> mit async/await. await wartet, ohne den Thread zu blockieren.', 'async Task<string> LadeAsync(HttpClient http)\n{\n    string html = await http.GetStringAsync("https://example.com");\n    return html[..100];\n}'],
+    ['Welche Namenskonventionen sind anders?', 'Methoden und Properties in PascalCase (ToString, nicht toString). Interfaces beginnen mit I (IComparable), private Felder oft mit _name.', 'public interface IRechner { int Addiere(int a, int b); }\nprivate int _zaehler;'],
+    ['Wie sieht ein modernes switch aus?', 'Als switch-Ausdruck mit Pattern Matching. _ ist der Default-Fall.', 'string Art(int n) => n switch\n{\n    0 => "null",\n    > 0 and < 10 => "klein",\n    >= 10 => "groß",\n    _ => "negativ"\n};'],
+    ['Was entspricht Maven bzw. Gradle?', 'Die dotnet CLI mit NuGet als Paketquelle. Das Projekt beschreibt eine .csproj-Datei (XML, ähnlich pom.xml).', 'dotnet new console -n MeinProjekt\ndotnet add package Newtonsoft.Json\ndotnet run'],
+  ]},
+  basics: { name: 'C#-Grundlagen', cards: [
+    ['Welche Ganzzahltypen gibt es?', 'sbyte/byte (8 Bit), short/ushort (16), int/uint (32), long/ulong (64). Im Unterschied zu Java gibt es auch vorzeichenlose Typen.', 'byte b = 255;      // in Java gibt es kein unsigned byte\nuint u = 4_000_000_000;'],
+    ['Wann nimmt man decimal statt double?', 'Für Geld und alles, was dezimal exakt sein muss. decimal ist 128-Bit-Dezimal, das Literal hat das Suffix m.', 'decimal preis = 19.99m;\ndouble d = 0.1 + 0.2;   // 0.30000000000000004'],
+    ['Was ist der Unterschied zwischen string und StringBuilder?', 'string ist unveränderlich (wie in Java). In Schleifen ist StringBuilder günstiger.', 'var sb = new StringBuilder();\nfor (int i = 0; i < 3; i++) sb.Append(i).Append(\';\');\nstring s = sb.ToString(); // "0;1;2;"'],
+    ['Wie deklariert man Arrays, auch mehrdimensionale?', 'Eindimensional wie in Java. Echte 2D-Arrays schreibt man [,], Arrays von Arrays [][].', 'int[] zahlen = { 1, 2, 3 };\nint[,] feld = new int[3, 3];\nfeld[1, 2] = 5;\nint[][] zacken = new int[2][];'],
+    ['Was sind Tupel?', 'Leichtgewichtige Gruppen von Werten, ideal für mehrere Rückgabewerte.', '(int min, int max) Spanne(int[] z) => (z.Min(), z.Max());\nvar (lo, hi) = Spanne(new[] { 4, 1, 9 });'],
+    ['Was ist ein Indexer?', 'Damit lässt sich ein eigenes Objekt wie ein Array mit [] ansprechen.', 'class Regal\n{\n    private string[] _f = new string[10];\n    public string this[int i] { get => _f[i]; set => _f[i] = value; }\n}'],
+    ['Wofür gibt es Ranges und Indizes von hinten?', '^1 steht für das letzte Element, a..b ist ein Bereich (b exklusiv).', 'int[] z = { 1, 2, 3, 4, 5 };\nint letzte = z[^1];     // 5\nint[] mitte = z[1..4];  // 2,3,4'],
+    ['Was macht is bzw. as?', 'is prüft den Typ und kann direkt in eine Variable casten. as castet und liefert bei falschem Typ null statt einer Exception.', 'if (obj is string s && s.Length > 3) { }\nvar t = obj as Tier;   // null, wenn kein Tier'],
+    ['Was sind delegates und events?', 'Ein delegate ist ein typsicherer Funktionszeiger, ein event baut darauf auf. Mit += abonnierst du.', 'public event Action<int>? PunkteGeaendert;\nPunkteGeaendert?.Invoke(10);\n\nspiel.PunkteGeaendert += p => Console.WriteLine(p);'],
+    ['Was ist ein Interface mit Default-Implementierung?', 'Wie in Java 8 und später: Ein Interface darf eine Standard-Implementierung mitbringen (seit C# 8).', 'interface ILogger\n{\n    void Log(string m);\n    void Info(string m) => Log("[INFO] " + m);\n}'],
+    ['Was sind static class und static Konstruktor?', 'Eine static class lässt sich nicht instanziieren (z. B. für Helfer). Der static Konstruktor läuft einmal vor der ersten Nutzung.', 'static class Mathe\n{\n    static Mathe() { /* einmalig */ }\n    public static int Quadrat(int x) => x * x;\n}'],
+    ['Wofür gibt es object initializer?', 'Um Properties direkt beim Erzeugen zu setzen, ohne passenden Konstruktor.', 'var p = new Person { Name = "Ali", Alter = 17 };'],
+  ]}
+};
+const QUIZ = [
+  ['Was gibt dieser Code aus?\n\nstring a = "Java";\nstring b = "Ja" + "va".ToString();\nConsole.WriteLine(a == b);', ['True', 'False', 'Compilerfehler', 'NullReferenceException'], 0, '== vergleicht bei string in C# den Inhalt, deshalb True.'],
+  ['Welches Schlüsselwort braucht eine Basismethode, damit eine Unterklasse sie mit override überschreiben kann?', ['virtual', 'final', 'new', 'static'], 0, 'Ohne virtual (oder abstract) ist eine Methode in C# nicht überschreibbar.'],
+  ['Welche Sichtbarkeit hat ein Feld ohne Modifizierer in einer Klasse?', ['private', 'internal', 'public', 'package-private'], 0, 'Member sind standardmäßig private, Klassen internal. package-private gibt es in C# nicht.'],
+  ['Was gibt aus?\n\nint? x = null;\nConsole.WriteLine(x ?? 5);', ['5', 'null', '0', 'Compilerfehler'], 0, '?? liefert den rechten Wert, wenn links null steht.'],
+  ['Wie lautet die richtige Deklaration?', ['class Hund : Tier, IHaustier', 'class Hund extends Tier implements IHaustier', 'class Hund : IHaustier, Tier', 'class Hund(Tier) : IHaustier'], 0, 'Doppelpunkt, die Basisklasse zuerst, danach die Interfaces.'],
+  ['Was entspricht in LINQ der Stream-Methode map()?', ['Select', 'Where', 'Map', 'Aggregate'], 0, 'map → Select, filter → Where, reduce → Aggregate.'],
+  ['Was ist ein struct?', ['Ein Werttyp, der bei Zuweisung kopiert wird', 'Eine abstrakte Klasse', 'Ein Interface mit Feldern', 'Ein Referenztyp ohne Methoden'], 0, 'struct ist ein Werttyp, class ein Referenztyp.'],
+  ['Muss man in C# Exceptions mit throws in der Methodensignatur angeben?', ['Nein, es gibt keine checked Exceptions', 'Ja, wie in Java', 'Nur bei IOException', 'Nur in public Methoden'], 0, 'C# hat keine checked Exceptions.'],
+  ['Welcher Delegate passt zu einer Methode void Druck(string s)?', ['Action<string>', 'Func<string>', 'Func<string, void>', 'Predicate<string>'], 0, 'Action für Methoden ohne Rückgabewert, Func<…, TResult> für Methoden mit Rückgabewert.'],
+  ['Was ist der Unterschied zwischen const und readonly?', ['const muss zur Kompilierzeit feststehen, readonly kann im Konstruktor gesetzt werden', 'Es gibt keinen', 'readonly gilt nur für Strings', 'const kann man im Konstruktor ändern'], 0, 'const ist eine Kompilierzeit-Konstante, readonly wird einmalig zur Laufzeit gesetzt.'],
+  ['Was passiert am Ende des Scopes bei using var datei = File.OpenRead("a.txt");?', ['datei.Dispose() wird aufgerufen', 'Die Datei wird gelöscht', 'Nichts, das macht der Garbage Collector', 'Ein Compilerfehler'], 0, 'using sorgt für Dispose(), das Pendant zu try-with-resources.'],
+  ['Was gibt aus?\n\nvar z = new[] { 3, 8, 1, 6 };\nConsole.WriteLine(z.Where(x => x > 2).Count());', ['3', '2', '4', '1'], 0, '3, 8 und 6 sind größer als 2, also 3.'],
+  ['Wie heißt der Paketmanager von .NET?', ['NuGet', 'Maven', 'npm', 'Cargo'], 0, 'NuGet, bedient über dotnet add package.'],
+  ['Was gibt aus?\n\nint[] z = { 10, 20, 30, 40 };\nConsole.WriteLine(z[^2]);', ['30', '20', '40', 'IndexOutOfRangeException'], 0, '^1 ist das letzte Element, ^2 das vorletzte, also 30.'],
+  ['Welche Zeile ist eine gültige Auto-Property?', ['public int Alter { get; set; }', 'public int getAlter() { get; }', 'property int Alter;', 'public int Alter => { get; set; }'], 0, 'Auto-Properties schreibt man mit { get; set; }.'],
+];
+const UEB = [
+  ['Getter/Setter → Property', 'public class Konto {\n    private double stand;\n    public double getStand() { return stand; }\n    public void setStand(double s) { stand = s; }\n}', 'public class Konto\n{\n    public decimal Stand { get; set; }\n}\n// Bonus: decimal statt double für Geld'],
+  ['Stream → LINQ', 'List<String> r = schueler.stream()\n    .filter(s -> s.getNote() <= 2)\n    .map(Schueler::getName)\n    .sorted()\n    .collect(Collectors.toList());', 'var r = schueler\n    .Where(s => s.Note <= 2)\n    .Select(s => s.Name)\n    .OrderBy(n => n)\n    .ToList();'],
+  ['Vererbung & Überschreiben', 'public abstract class Form {\n    public abstract double flaeche();\n}\npublic class Kreis extends Form {\n    private final double r;\n    public Kreis(double r) { this.r = r; }\n    @Override public double flaeche() { return Math.PI * r * r; }\n}', 'public abstract class Form\n{\n    public abstract double Flaeche();\n}\npublic class Kreis : Form\n{\n    private readonly double _r;\n    public Kreis(double r) { _r = r; }\n    public override double Flaeche() => Math.PI * _r * _r;\n}'],
+  ['HashMap & Schleife', 'Map<String, Integer> zaehler = new HashMap<>();\nfor (String w : woerter) {\n    zaehler.put(w, zaehler.getOrDefault(w, 0) + 1);\n}', 'var zaehler = new Dictionary<string, int>();\nforeach (var w in woerter)\n{\n    zaehler[w] = zaehler.GetValueOrDefault(w) + 1;\n}'],
+  ['try-with-resources', 'try (BufferedReader br = new BufferedReader(new FileReader("a.txt"))) {\n    System.out.println(br.readLine());\n} catch (IOException e) {\n    e.printStackTrace();\n}', 'try\n{\n    using var sr = new StreamReader("a.txt");\n    Console.WriteLine(sr.ReadLine());\n}\ncatch (IOException e)\n{\n    Console.WriteLine(e);\n}'],
+  ['Parsen mit Fehlerbehandlung', 'int n;\ntry {\n    n = Integer.parseInt(eingabe);\n} catch (NumberFormatException e) {\n    n = -1;\n}', 'int n = int.TryParse(eingabe, out var x) ? x : -1;'],
+];
+const SPICK = [
+  ['Ausgabe', 'System.out.println("Hi " + n);', 'Console.WriteLine($"Hi {n}");'],
+  ['String', 'String / equals()', 'string / =='],
+  ['Boolean', 'boolean', 'bool'],
+  ['Konstante', 'static final int MAX = 5;', 'const int Max = 5;'],
+  ['Unveränderliches Feld', 'private final List<X> l;', 'private readonly List<X> _l;'],
+  ['Vererbung', 'extends / implements', ':'],
+  ['Basis aufrufen', 'super(x); super.m();', ': base(x)  /  base.M();'],
+  ['Überschreiben', '@Override', 'virtual + override'],
+  ['Klasse nicht erweiterbar', 'final class', 'sealed class'],
+  ['Paket', 'package / import', 'namespace / using'],
+  ['Listen', 'ArrayList<T>', 'List<T>'],
+  ['Map', 'HashMap<K,V>', 'Dictionary<K,V>'],
+  ['Set', 'HashSet<T>', 'HashSet<T>'],
+  ['For-each', 'for (T x : liste)', 'foreach (var x in liste)'],
+  ['Lambda', 'x -> x * 2', 'x => x * 2'],
+  ['Funktionstypen', 'Function / Consumer / Supplier', 'Func / Action / Func<T>'],
+  ['Streams', 'stream().filter().map()', 'Where().Select()'],
+  ['Ressourcen', 'try (var r = …)', 'using var r = …;'],
+  ['Async', 'CompletableFuture<T>', 'async Task<T> + await'],
+  ['Null-Ersatz', 'Optional.ofNullable(x).orElse(y)', 'x ?? y'],
+  ['Instanceof-Cast', 'if (o instanceof String s)', 'if (o is string s)'],
+  ['Record', 'record P(int x, int y)', 'record P(int X, int Y);'],
+  ['Länge', 'arr.length / list.size()', 'arr.Length / list.Count'],
+  ['Main', 'public static void main(String[] a)', 'static void Main(string[] args)  oder Top-Level'],
+  ['Build', 'Maven / Gradle', 'dotnet CLI + NuGet'],
+];
+
+// ---------- Syntax-Hervorhebung (schlicht) ----------
+const KW = 'abstract|as|async|await|base|bool|break|case|catch|class|const|continue|decimal|default|delegate|do|double|else|enum|event|false|finally|for|foreach|get|if|in|int|interface|internal|is|long|namespace|new|null|object|out|override|private|protected|public|readonly|record|ref|return|sealed|set|static|string|struct|switch|this|throw|true|try|uint|using|var|virtual|void|where|while|with|byte|char|float|and|or|not|extends|implements|final|boolean|String|super';
+function hl(code) {
+  const re = new RegExp(`(\\/\\/.*$)|(&quot;.*?&quot;)|\\b(${KW})\\b`, 'gm');
+  return esc(code).replace(re, (m, c, s, k) => c ? `<span class="c">${c}</span>` : s ? `<span class="s">${s}</span>` : `<span class="k">${k}</span>`);
+}
+
+// ---------- Zustand ----------
+let D = { prog: {}, own: [], deck: 'diff', quizBest: 0 };
+const save = () => Store.set('lernen', D);
+const INT = [0, 0, 1, 3, 7, 14];
+const deckCards = id => id === 'own' ? D.own.map(c => [c.q, c.a, c.c, c.id]) : DECKS[id].cards.map((c, i) => [...c, id + i]);
+const due = id => deckCards(id).filter(c => { const p = D.prog[c[3]]; return !p || p.due <= today(); });
+let cur = null, shown = false;
+
+function renderDecks() {
+  const ids = ['diff', 'basics', ...(D.own.length ? ['own'] : [])];
+  $('#decks').innerHTML = ids.map(id => { const all = deckCards(id), d = due(id).length, done = all.filter(c => (D.prog[c[3]]||{}).box >= 4).length;
+    return `<button class="deck ${D.deck===id?'on':''}" data-deck="${id}"><b>${id==='own'?'Eigene Karten':DECKS[id].name}</b><span class="mute" style="font-size:12px">${all.length} Karten · ${d} fällig · ${done} sicher</span><div class="bar" style="width:100%;margin-top:4px"><i style="width:${all.length?done/all.length*100:0}%"></i></div></button>`; }).join('');
+  const counts = [1,2,3,4,5].map(b => deckCards(D.deck).filter(c => ((D.prog[c[3]]||{}).box||1) === b).length);
+  $('#boxes').innerHTML = counts.map((n,i) => `<div><span class="label">F${i+1}</span><b>${n}</b></div>`).join('');
+}
+function nextCard() {
+  const list = due(D.deck); shown = false;
+  cur = list.length ? list.sort((a,b) => ((D.prog[a[3]]||{}).box||0) - ((D.prog[b[3]]||{}).box||0))[Math.floor(Math.random()*Math.min(3, list.length))] : null;
+  drawCard();
+}
+function drawCard() {
+  if (!cur) { $('#card').innerHTML = `<div class="q">Alles erledigt für heute.</div><p class="mute" style="margin-top:10px">Morgen kommen die nächsten Karten. Oder nimm dir das Quiz vor.</p>`; $('#rate').innerHTML = ''; return; }
+  const [q, a, c] = cur;
+  $('#card').innerHTML = `<div class="label" style="margin-bottom:16px">Fach ${(D.prog[cur[3]]||{}).box||1}</div><div class="q">${esc(q)}</div>` +
+    (shown ? `<div class="a fade-in">${esc(a)}${c ? `<pre>${hl(c)}</pre>` : ''}</div>` : `<div class="hint">Klicken oder <span class="kbd">Leertaste</span> zum Umdrehen</div>`);
+  $('#rate').innerHTML = (shown ? `<button data-r="0">Nicht gewusst <span class="kbd">1</span></button><button class="primary" data-r="1">Gewusst <span class="kbd">2</span></button>` : '')
+    + (String(cur[3]).startsWith('o') ? `<button class="ghost" id="edCard">✎ Karte bearbeiten</button>` : '');
+  const ec = $('#edCard'); if (ec) ec.onclick = () => { const c = D.own.find(x => x.id === cur[3]);
+    WB.editForm('Eigene Karte bearbeiten', [{ k: 'q', l: 'Frage', v: c.q, req: true }, { k: 'a', l: 'Antwort', type: 'textarea', v: c.a }, { k: 'c', l: 'Code (optional)', type: 'textarea', v: c.c || '' }], { danger: 'Karte löschen' })
+      .then(v => { if (v === 'delete') { D.own = D.own.filter(x => x !== c); delete D.prog[c.id]; if (!D.own.length) D.deck = 'diff'; save(); renderDecks(); nextCard(); } else if (v) { Object.assign(c, v); cur = [c.q, c.a, c.c, c.id]; save(); drawCard(); } }); };
+}
+function rate(ok) {
+  const p = D.prog[cur[3]] || { box: 1 }; p.box = ok ? Math.min(5, p.box + 1) : 1;
+  const d = new Date(); d.setDate(d.getDate() + (ok ? INT[p.box] : 0)); p.due = ymd(d);
+  D.prog[cur[3]] = p; save(); renderDecks(); nextCard();
+}
+$('#card').onclick = () => { if (cur && !shown) { shown = true; drawCard(); } };
+$('#rate').onclick = e => { const b = e.target.closest('[data-r]'); if (b) rate(b.dataset.r === '1'); };
+document.addEventListener('keydown', e => {
+  if (/INPUT|TEXTAREA/.test(document.activeElement.tagName) || $('#m-karten').classList.contains('hide')) return;
+  if (e.code === 'Space') { e.preventDefault(); if (cur && !shown) { shown = true; drawCard(); } }
+  if (shown && (e.key === '1' || e.key === '2')) rate(e.key === '2');
+});
+$('#decks').onclick = e => { const b = e.target.closest('[data-deck]'); if (b) { D.deck = b.dataset.deck; save(); renderDecks(); nextCard(); } };
+$('#reset').onclick = () => { if (confirm('Fortschritt dieses Stapels zurücksetzen?')) { deckCards(D.deck).forEach(c => delete D.prog[c[3]]); save(); renderDecks(); nextCard(); } };
+$('#addCard').onsubmit = e => { e.preventDefault(); const f = e.target; D.own.push({ id: 'o' + uid(), q: f.cq.value, a: f.ca.value, c: f.cc.value }); f.reset(); D.deck = 'own'; save(); renderDecks(); nextCard(); toast('Karte hinzugefügt'); };
+
+// ---------- Quiz ----------
+let qz = null;
+function startQuiz() { qz = { order: [...QUIZ.keys()].sort(() => Math.random() - .5).slice(0, 10), i: 0, score: 0, answered: false }; drawQuiz(); }
+function drawQuiz() {
+  if (qz.i >= qz.order.length) {
+    const pct = qz.score / qz.order.length * 100; if (qz.score > D.quizBest) { D.quizBest = qz.score; save(); }
+    $('#quiz').innerHTML = `<div class="label">Ergebnis</div><h2 style="margin:10px 0;font-size:40px" class="mono">${qz.score} / ${qz.order.length}</h2><p class="mute">${pct >= 90 ? 'Stark, du denkst schon in C#.' : pct >= 60 ? 'Solide. Die Karteikarten schließen die Lücken.' : 'Kein Problem: erst die Karteikarten, dann noch mal.'} Bestwert: ${D.quizBest}</p><button class="primary" style="margin-top:16px" id="again">Noch eine Runde</button>`;
+    $('#again').onclick = startQuiz; return;
+  }
+  const [q, opts, right, why] = QUIZ[qz.order[qz.i]];
+  const mix = opts.map((o, i) => ({ o, i })).sort(() => Math.random() - .5);
+  const [head, ...code] = q.split('\n\n');
+  $('#quiz').innerHTML = `<div class="row between"><span class="label">Frage ${qz.i + 1} / ${qz.order.length}</span><span class="mono mute">${qz.score} Punkte</span></div>
+    <div class="bar" style="margin:10px 0 18px"><i style="width:${qz.i / qz.order.length * 100}%"></i></div>
+    <h3 style="font-size:19px">${esc(head)}</h3>${code.length ? `<pre>${hl(code.join('\n\n'))}</pre>` : ''}
+    <div style="margin-top:12px">${mix.map(m => `<button class="opt" data-i="${m.i}">${esc(m.o)}</button>`).join('')}</div><div id="why"></div>`;
+  qz.answered = false;
+  $$('#quiz .opt').forEach(b => b.onclick = () => {
+    if (qz.answered) return; qz.answered = true; const ok = +b.dataset.i === right; if (ok) qz.score++;
+    $$('#quiz .opt').forEach(x => { if (+x.dataset.i === right) x.classList.add('right'); });
+    if (!ok) b.classList.add('wrong');
+    $('#why').innerHTML = `<div class="sunk fade-in" style="margin-top:14px"><b class="${ok?'good':'bad'}">${ok ? 'Richtig.' : 'Nicht ganz.'}</b> ${esc(why)}</div><div class="row end" style="margin-top:12px"><button class="primary" id="nx">Weiter →</button></div>`;
+    $('#nx').onclick = () => { qz.i++; drawQuiz(); };
+  });
+}
+
+// ---------- Übersetzen & Spickzettel ----------
+$('#ueb').innerHTML = UEB.map(([t, j, c], i) => `<div class="panel"><div class="panel-h"><span class="label">Aufgabe ${i+1} · ${esc(t)}</span></div>
+  <div class="g2"><div><div class="mute" style="font-size:12px">Java</div><pre>${hl(j)}</pre></div>
+  <div><div class="mute" style="font-size:12px">Dein C#</div><textarea spellcheck="false" style="font:13px/1.55 var(--f-mono);min-height:150px;margin-top:10px" placeholder="Hier übersetzen …"></textarea></div></div>
+  <details style="margin-top:10px"><summary class="acc" style="cursor:pointer;font-weight:600">Lösung zeigen</summary><pre>${hl(c)}</pre></details></div>`).join('');
+$('#spick').innerHTML = '<tr><th>Thema</th><th>Java</th><th>C#</th></tr>' + SPICK.map(([t, j, c]) => `<tr><td>${esc(t)}</td><td><code>${esc(j)}</code></td><td><code class="acc">${esc(c)}</code></td></tr>`).join('');
+
+$('#modes').onclick = e => { const b = e.target.closest('button'); if (!b) return;
+  $$('#modes button').forEach(x => x.classList.toggle('on', x === b));
+  ['karten','quiz','uebung','spick'].forEach(m => $('#m-' + m).classList.toggle('hide', m !== b.dataset.m));
+  if (b.dataset.m === 'quiz' && !qz) startQuiz(); };
+
+(async () => { D = Object.assign(D, await Store.get('lernen', D)); renderDecks(); nextCard(); })();
+</script>
+</body></html>

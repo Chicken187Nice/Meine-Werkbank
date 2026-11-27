@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Docker</title>
+<style>
+  .tw { overflow:auto; } table.t { font-size:13px; } table.t td { white-space:nowrap; vertical-align:top; }
+  .sub { color:var(--mute); font-size:11px; max-width:260px; overflow:hidden; text-overflow:ellipsis; }
+  .meter { width:90px; margin-top:4px; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Technik</div><h1>Docker</h1><p>Alle Container auf dem Server, nur zum Ansehen. Die Werte kommen jede Minute vom Server.</p></div>
+    <span class="mute" id="upd" style="font-size:12px"></span>
+  </div>
+  <p class="bad" id="err" style="margin-bottom:12px"></p>
+  <div class="g4" id="kpi"></div>
+  <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Container</span></div><div class="tw" id="rows"></div></div>
+  <p class="mute" style="font-size:12px;margin-top:10px">CPU in Prozent eines Kerns. „Neustarts“ zählt automatische Neustarts durch Docker seit dem Anlegen des Containers.</p>
+</main>
+<script>
+WB.header('docker');
+const { $, esc, api } = WB;
+const size = b => b == null ? '–' : b < 1073741824 ? Math.round(b / 1048576) + ' MB' : (b / 1073741824).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' GB';
+const since = s => { const t = Date.parse(s); if (!t || t < 0) return ''; const m = Math.max(0, Math.floor((Date.now() - t) / 60000)); return m < 60 ? `${m} Min` : m < 2880 ? `${Math.floor(m / 60)} Std` : `${Math.floor(m / 1440)} Tagen`; };
+const stat = (l, v, s, cls = '') => `<div class="panel stat"><div class="label">${l}</div><div class="v ${cls}">${v}</div><div class="s">${s}</div></div>`;
+const STATE = { running: 'läuft', exited: 'gestoppt', restarting: 'startet neu', paused: 'angehalten', created: 'angelegt', dead: 'defekt' };
+async function load() {
+  const d = await api('/api/docker'), c = d.containers;
+  $('#err').textContent = d.error;
+  const run = c.filter(x => x.state === 'running'), bad = c.filter(x => x.problem);
+  $('#kpi').innerHTML = stat('Läuft', `${run.length}/${c.length}`, 'Container') + stat('Auffällig', bad.length, bad.length ? esc(bad.map(x => x.name).join(', ')) : 'alles unauffällig', bad.length ? 'bad' : 'good')
+    + stat('CPU', run.reduce((s, x) => s + (x.cpu || 0), 0).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' %', 'alle Container zusammen') + stat('Arbeitsspeicher', size(run.reduce((s, x) => s + (x.mem || 0), 0)), 'alle Container zusammen');
+  const rows = [...c].sort((a, b) => !!b.problem - !!a.problem || a.name.localeCompare(b.name)).map(x => {
+    const cls = x.problem ? 'bad' : x.state === 'running' ? 'good' : 'mute', mark = x.problem ? '✕' : x.state === 'running' ? '✓' : '■';
+    return `<tr><td><b>${esc(x.name)}</b><div class="sub" title="${esc(x.image)}">${esc(x.image)}</div></td>
+      <td class="${cls}">${mark} ${esc(STATE[x.state] || x.state)}${x.health ? ` · ${esc(x.health)}` : ''}${x.problem ? `<div>${esc(x.problem)}</div>` : ''}</td>
+      <td class="mono">${x.state === 'running' ? 'seit ' + since(x.started) : since(x.finished) ? 'vor ' + since(x.finished) : '–'}</td>
+      <td class="mono">${x.cpu == null ? '–' : x.cpu.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' %'}</td>
+      <td class="mono">${size(x.mem)}${x.memPerc == null ? '' : `<div class="bar meter" title="${x.memPerc} % des Servers"><i style="width:${Math.min(100, x.memPerc)}%"></i></div>`}</td>
+      <td class="mono ${x.restarts ? 'bad' : ''}">${x.restarts}</td></tr>`; });
+  $('#rows').innerHTML = rows.length ? `<table class="t"><thead><tr><th>Container</th><th>Status</th><th>Laufzeit</th><th>CPU</th><th>RAM</th><th>Neustarts</th></tr></thead><tbody>${rows.join('')}</tbody></table>` : '<div class="empty">Noch keine Daten</div>';
+  $('#upd').textContent = d.t ? 'Stand ' + new Date(d.t).toLocaleTimeString('de-DE') : '';
+}
+const safe = () => load().catch(e => $('#err').textContent = e.message);
+safe(); setInterval(() => { if (!document.hidden) safe(); }, 30000);
+</script>
+</body></html>

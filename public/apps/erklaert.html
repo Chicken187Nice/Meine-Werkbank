@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Erklärt</title>
+<style>
+  canvas { width:100%; display:block; border-radius: var(--r-sm); background: var(--bg); border:1px solid var(--line); }
+  .steps li { margin: 6px 0; color: var(--mute); } .steps li.on { color: var(--text); }
+  .steps li.on::marker { color: var(--acc); }
+  .mono-box { font: 15px/1.6 var(--f-mono); word-break: break-all; }
+  .phase { font: 700 28px var(--f-display); }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+  .kv span:nth-child(odd) { color: var(--mute); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">06 · Lernen</div><h1>Erklärt</h1><p>Drei Dinge, die man täglich benutzt, aber selten sieht. Hier kannst du daran herumspielen.</p></div>
+    <div class="tabs" id="tabs"><button class="on" data-t="netz">Datenpakete</button><button data-t="krypto">Verschlüsselung</button><button data-t="motor">Viertakt-Motor</button></div>
+  </div>
+
+  <!-- NETZ -->
+  <section id="t-netz" class="side">
+    <div class="panel stack">
+      <div class="label">Wie eine Nachricht durchs Internet reist</div>
+      <p class="mute" style="font-size:14px">Deine Nachricht wird in Pakete zerlegt. Jedes Paket sucht sich seinen Weg selbst, und am Ziel werden sie wieder sortiert. <b style="color:var(--text)">Klick auf einen Router</b>, um ihn ausfallen zu lassen. Die Pakete weichen dann aus.</p>
+      <label class="field"><span>Nachricht</span><input id="msg" value="Hallo Server, wie geht's?" maxlength="60"></label>
+      <label class="field"><span>Paketgröße: <b id="psz">6</b> Zeichen</span><input type="range" id="size" min="2" max="12" value="6"></label>
+      <button class="primary" id="send">Senden</button>
+      <div class="sunk"><div class="label" style="margin-bottom:8px">Am Server angekommen</div><div class="mono-box" id="recv">–</div></div>
+      <ol class="steps" id="netSteps" style="font-size:13px;padding-left:18px;margin:0">
+        <li>DNS: Der Name wird in eine IP-Adresse übersetzt</li><li>TCP: Verbindung aufbauen (SYN, SYN-ACK, ACK)</li><li>Nachricht in nummerierte Pakete zerlegen</li><li>Router leiten jedes Paket weiter (Hop für Hop)</li><li>Server sortiert die Pakete und setzt sie zusammen</li></ol>
+    </div>
+    <canvas id="net" width="800" height="520"></canvas>
+  </section>
+
+  <!-- KRYPTO -->
+  <section id="t-krypto" class="hide stack">
+    <div class="g2">
+      <div class="panel stack">
+        <div class="label">1 · Caesar: ein gemeinsamer Schlüssel</div>
+        <p class="mute" style="font-size:14px">Jeder Buchstabe wird um <b style="color:var(--text)">k</b> Stellen verschoben. Wer k kennt, kann entschlüsseln. Das Problem: Wie gibst du k weiter, ohne dass jemand mithört?</p>
+        <label class="field"><span>Klartext</span><input id="cIn" value="TREFFEN UM ACHT"></label>
+        <label class="field"><span>Schlüssel k = <b id="kV">3</b></span><input type="range" id="k" min="1" max="25" value="3"></label>
+        <canvas id="wheel" width="520" height="300"></canvas>
+        <div class="sunk"><span class="label">Geheimtext</span><div class="mono-box acc" id="cOut" style="margin-top:6px"></div></div>
+        <p class="faint" style="font-size:12px">Knacken ist leicht: Es gibt nur 25 Schlüssel, und das E ist im Deutschen der häufigste Buchstabe.</p>
+      </div>
+      <div class="panel stack">
+        <div class="label">2 · RSA: öffentlicher und privater Schlüssel</div>
+        <p class="mute" style="font-size:14px">Jeder darf mit dem <b class="acc">öffentlichen</b> Schlüssel verschlüsseln, entschlüsseln kann nur der <b style="color:var(--good)">private</b>. Das funktioniert, weil sich n leicht multiplizieren, aber extrem schwer zurück in p und q zerlegen lässt. (Hier mit kleinen Zahlen, echte haben über 600 Stellen.)</p>
+        <div class="fields"><label class="field"><span>Primzahl p</span><select id="p"></select></label><label class="field"><span>Primzahl q</span><select id="q"></select></label></div>
+        <div class="kv sunk" id="rsaKeys"></div>
+        <label class="field"><span>Nachricht (A–Z)</span><input id="rIn" value="HALLO" maxlength="16"></label>
+        <div class="sunk stack" id="rsaOut" style="font-size:13px"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- MOTOR -->
+  <section id="t-motor" class="hide side">
+    <div class="panel stack">
+      <div class="label">Takt</div>
+      <div class="phase acc" id="ph">Ansaugen</div>
+      <p class="mute" id="phTxt" style="min-height:66px"></p>
+      <label class="field"><span>Drehzahl</span><input type="range" id="rpm" min="0" max="100" value="18"></label>
+      <div class="row"><button id="stepBtn">Schritt ▸</button><span class="mute" style="font-size:13px">oder Regler auf 0 und schrittweise</span></div>
+      <hr>
+      <p class="faint" style="font-size:12px">Ein Arbeitsspiel braucht zwei Kurbelwellen-Umdrehungen (720°). Nur einer von vier Takten liefert Kraft. Den Rest überbrückt das Schwungrad.</p>
+    </div>
+    <canvas id="eng" width="700" height="560"></canvas>
+  </section>
+</main>
+<script>
+WB.header('erklaert');
+const { $, $$, esc } = WB;
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+let active = 'netz';
+$('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; active = b.dataset.t;
+  $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); ['netz','krypto','motor'].forEach(t => $('#t-'+t).classList.toggle('hide', t !== active)); };
+
+// ================= NETZ =================
+const net = $('#net'), nx = net.getContext('2d');
+const N = [
+  { id:'Du', x:70, y:260, end:1 }, { id:'Router', x:190, y:260 }, { id:'Provider', x:310, y:260 },
+  { id:'Frankfurt', x:440, y:110 }, { id:'Amsterdam', x:440, y:260 }, { id:'Paris', x:440, y:410 },
+  { id:'London', x:580, y:170 }, { id:'Brüssel', x:580, y:350 }, { id:'Server', x:720, y:260, end:1 }
+];
+const E = [[0,1],[1,2],[2,3],[2,4],[2,5],[3,4],[4,5],[3,6],[4,6],[4,7],[5,7],[6,8],[7,8],[6,7]];
+const down = new Set(); let packets = [], recv = [], total = 0;
+const dist = (a,b) => Math.hypot(N[a].x-N[b].x, N[a].y-N[b].y);
+function route(jit) {
+  const D = N.map(() => Infinity), P = N.map(() => -1), Q = new Set(N.keys()); D[0] = 0;
+  while (Q.size) { let u = -1; for (const q of Q) if (u < 0 || D[q] < D[u]) u = q; Q.delete(u); if (D[u] === Infinity) break;
+    for (const [a,b] of E) { const v = a===u ? b : b===u ? a : -1; if (v<0 || down.has(v) || !Q.has(v)) continue;
+      const w = dist(u,v) * (1 + Math.random()*jit); if (D[u]+w < D[v]) { D[v] = D[u]+w; P[v] = u; } } }
+  if (D[8] === Infinity) return null; const path = []; for (let v = 8; v >= 0; v = P[v]) path.unshift(v); return path;
+}
+function send() {
+  const m = $('#msg').value || ' ', s = +$('#size').value; const parts = []; for (let i=0;i<m.length;i+=s) parts.push(m.slice(i,i+s));
+  recv = []; total = parts.length; $('#recv').textContent = '…'; packets = [];
+  parts.forEach((t, i) => { const path = route(.9); if (!path) { $('#recv').innerHTML = '<span class="bad">Kein Weg zum Server: zu viele Router ausgefallen.</span>'; return; }
+    packets.push({ n:i+1, t, path, seg:0, prog:-i*0.35, speed: .018 + Math.random()*.012 }); });
+  $$('#netSteps li').forEach((li,i) => setTimeout(() => li.classList.add('on'), i*220));
+}
+$('#send').onclick = send; $('#size').oninput = e => $('#psz').textContent = e.target.value;
+net.onclick = e => { const r = net.getBoundingClientRect(); const x = (e.clientX-r.left)*net.width/r.width, y = (e.clientY-r.top)*net.height/r.height;
+  N.forEach((n,i) => { if (!n.end && Math.hypot(n.x-x,n.y-y) < 30) down.has(i) ? down.delete(i) : down.add(i); }); };
+function drawNet() {
+  const acc = css('--acc'), line = css('--line2'), text = css('--text'), mute = css('--mute'), bad = css('--bad'), bg3 = css('--bg3');
+  nx.clearRect(0,0,net.width,net.height); nx.lineWidth = 2;
+  for (const [a,b] of E) { nx.strokeStyle = down.has(a)||down.has(b) ? bad+'44' : line; nx.setLineDash(down.has(a)||down.has(b) ? [4,6] : []); nx.beginPath(); nx.moveTo(N[a].x,N[a].y); nx.lineTo(N[b].x,N[b].y); nx.stroke(); }
+  nx.setLineDash([]);
+  N.forEach((n,i) => { nx.fillStyle = bg3; nx.strokeStyle = down.has(i) ? bad : n.end ? acc : line; nx.lineWidth = 2;
+    nx.beginPath(); if (n.end) nx.roundRect(n.x-30,n.y-22,60,44,8); else nx.arc(n.x,n.y,24,0,7); nx.fill(); nx.stroke();
+    nx.fillStyle = down.has(i) ? bad : text; nx.font = '600 12px Bahnschrift, Segoe UI, sans-serif'; nx.textAlign = 'center';
+    nx.fillText(down.has(i) ? '✕' : n.end ? (i ? 'SRV' : 'PC') : '◎', n.x, n.y+4);
+    nx.fillStyle = mute; nx.font = '12px Segoe UI, sans-serif'; nx.fillText(n.id, n.x, n.y + (n.end ? 40 : 42)); });
+  for (const p of packets) {
+    if (p.done) continue; p.prog += p.speed; if (p.prog < 0) continue;
+    if (p.prog >= 1) { p.prog = 0; p.seg++; if (p.seg >= p.path.length-1) { p.done = true; recv.push(p); showRecv(); continue; }
+      if (down.has(p.path[p.seg+1])) { const r = rerouteFrom(p.path[p.seg]); if (r) p.path = p.path.slice(0,p.seg).concat(r); } }
+    const a = N[p.path[p.seg]], b = N[p.path[p.seg+1]]; const x = a.x+(b.x-a.x)*p.prog, y = a.y+(b.y-a.y)*p.prog;
+    nx.fillStyle = acc; nx.beginPath(); nx.roundRect(x-12,y-10,24,20,5); nx.fill();
+    nx.fillStyle = css('--acc-ink'); nx.font = '700 11px Cascadia Mono, monospace'; nx.textAlign='center'; nx.fillText(p.n, x, y+4);
+  }
+}
+function rerouteFrom(start) { // Dijkstra ab dem aktuellen Router
+  const D = N.map(() => Infinity), P = N.map(() => -1), Q = new Set(N.keys()); D[start] = 0;
+  while (Q.size) { let u=-1; for (const q of Q) if (u<0||D[q]<D[u]) u=q; Q.delete(u); if (D[u]===Infinity) break;
+    for (const [a,b] of E) { const v = a===u?b:b===u?a:-1; if (v<0||down.has(v)||!Q.has(v)) continue; if (D[u]+dist(u,v) < D[v]) { D[v]=D[u]+dist(u,v); P[v]=u; } } }
+  if (D[8]===Infinity) return null; const path=[]; for (let v=8; v>=0 && v!==-1; v=P[v]) { path.unshift(v); if (v===start) break; } return path; }
+function showRecv() {
+  const sorted = [...recv].sort((a,b)=>a.n-b.n);
+  const arrival = recv.map(p => p.n).join(' → ');
+  $('#recv').innerHTML = `<span class="faint">Ankunft: ${arrival}</span><br>` + (recv.length === total ? `<span class="good">${esc(sorted.map(p=>p.t).join(''))}</span>` : esc(sorted.map(p=>p.t).join('·')) + ' <span class="faint">(wartet…)</span>');
+}
+
+// ================= KRYPTO =================
+const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const caesar = (s,k) => s.toUpperCase().replace(/[A-Z]/g, c => A[(A.indexOf(c)+k)%26]);
+const wheel = $('#wheel'), wx = wheel.getContext('2d');
+function drawCaesar() {
+  const k = +$('#k').value; $('#kV').textContent = k; $('#cOut').textContent = caesar($('#cIn').value, k);
+  const acc = css('--acc'), text = css('--text'), mute = css('--mute'), line = css('--line2');
+  wx.clearRect(0,0,wheel.width,wheel.height); const w = wheel.width/13;
+  for (let r=0;r<2;r++) for (let i=0;i<13;i++) { const idx = r*13+i, x = i*w, y = r*140 + 10;
+    wx.strokeStyle = line; wx.strokeRect(x+3,y,w-6,46); wx.strokeRect(x+3,y+62,w-6,46);
+    wx.fillStyle = text; wx.font = '600 18px Cascadia Mono, monospace'; wx.textAlign='center'; wx.fillText(A[idx], x+w/2, y+30);
+    wx.fillStyle = acc; wx.fillText(A[(idx+k)%26], x+w/2, y+92); wx.fillStyle = mute; wx.font = '12px sans-serif'; wx.fillText('↓', x+w/2, y+57); }
+}
+['#cIn','#k'].forEach(s => $(s).oninput = drawCaesar);
+const PR = [11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+$('#p').innerHTML = $('#q').innerHTML = PR.map(p => `<option>${p}</option>`).join(''); $('#p').value = 61; $('#q').value = 53;
+const gcd = (a,b) => b ? gcd(b, a%b) : a;
+const modpow = (b,e,m) => { let r=1n; b=BigInt(b)%BigInt(m); e=BigInt(e); m=BigInt(m); while(e>0n){ if(e&1n) r=r*b%m; b=b*b%m; e>>=1n; } return Number(r); };
+const modinv = (a,m) => { let [o,r]=[a,m],[os,s]=[1,0]; while(r){ const q=Math.floor(o/r); [o,r]=[r,o-q*r]; [os,s]=[s,os-q*s]; } return ((os%m)+m)%m; };
+function drawRSA() {
+  let p = +$('#p').value, q = +$('#q').value;
+  if (p === q) { $('#rsaKeys').innerHTML = '<span class="bad">p und q müssen verschieden sein</span>'; $('#rsaOut').innerHTML=''; return; }
+  const n = p*q, phi = (p-1)*(q-1); let e = 3; while (gcd(e,phi) !== 1) e += 2; const d = modinv(e, phi);
+  $('#rsaKeys').innerHTML = `<span>n = p · q</span><span class="mono">${p} · ${q} = ${n}</span><span>φ(n)</span><span class="mono">${phi}</span>
+    <span>öffentlich</span><span class="mono acc">(e = ${e}, n = ${n})</span><span>privat</span><span class="mono" style="color:var(--good)">(d = ${d}, n = ${n})</span>`;
+  const msg = $('#rIn').value.toUpperCase().replace(/[^A-Z]/g,''); const m = [...msg].map(c => A.indexOf(c)+2);
+  if (n <= 28) { $('#rsaOut').innerHTML = '<span class="warn">n ist zu klein. Nimm größere Primzahlen.</span>'; return; }
+  const c = m.map(x => modpow(x,e,n)); const back = c.map(x => modpow(x,d,n));
+  $('#rsaOut').innerHTML = `<div><span class="label">Buchstabe → Zahl (A=2 …)</span><div class="mono">${m.join(' ')}</div></div>
+    <div><span class="label">verschlüsselt: zahl^${e} mod ${n}</span><div class="mono acc">${c.join(' ')}</div></div>
+    <div><span class="label">entschlüsselt: c^${d} mod ${n}</span><div class="mono" style="color:var(--good)">${back.join(' ')} → ${back.map(x=>A[x-2]).join('')}</div></div>`;
+}
+['#p','#q','#rIn'].forEach(s => $(s).oninput = drawRSA);
+
+// ================= MOTOR =================
+const eng = $('#eng'), ex = eng.getContext('2d');
+let ang = 0;
+const PH = [
+  ['Ansaugen', 'Der Kolben fährt nach unten, das Einlassventil ist offen. Ein Kraftstoff-Luft-Gemisch wird angesaugt.'],
+  ['Verdichten', 'Beide Ventile sind zu. Der Kolben fährt hoch und presst das Gemisch auf etwa ein Zehntel zusammen. Dabei wird es heiß.'],
+  ['Arbeiten', 'Die Zündkerze zündet, das Gemisch verbrennt explosionsartig und drückt den Kolben nach unten. Das ist der einzige Takt, der Kraft liefert.'],
+  ['Ausstoßen', 'Das Auslassventil öffnet, der Kolben fährt hoch und schiebt die Abgase hinaus. Danach beginnt alles von vorn.']];
+$('#stepBtn').onclick = () => { ang = (Math.floor(ang / Math.PI) + 1) * Math.PI; };
+function drawEngine() {
+  const W = eng.width, cx = W/2, acc = css('--acc'), text = css('--text'), line = css('--line2'), mute = css('--mute'), good = css('--good'), bad = css('--bad'), bg3 = css('--bg3');
+  const rpm = +$('#rpm').value; ang += rpm * 0.0016;
+  const a720 = ang % (4*Math.PI), phase = Math.floor(a720 / Math.PI);
+  $('#ph').textContent = `${phase+1}. ${PH[phase][0]}`; $('#phTxt').textContent = PH[phase][1];
+  ex.clearRect(0,0,W,eng.height);
+  const crankY = 430, r = 60, rod = 170; const th = ang;          // Kurbelwinkel, 0 = oben (OT)
+  const px = cx + r*Math.sin(th), py = crankY - r*Math.cos(th);
+  const pistonY = py - Math.sqrt(rod*rod - (px-cx)**2);            // Kolbenbolzen
+  const topY = 110, cw = 150;
+  // Zylinder
+  ex.strokeStyle = text; ex.lineWidth = 3; ex.beginPath(); ex.moveTo(cx-cw/2, topY); ex.lineTo(cx-cw/2, 360); ex.moveTo(cx+cw/2, topY); ex.lineTo(cx+cw/2, 360); ex.stroke();
+  // Gas
+  const gasTop = topY, gasBot = pistonY - 30;
+  ex.fillStyle = [acc+'44', acc+'99', bad+'77', mute+'44'][phase]; ex.fillRect(cx-cw/2+2, gasTop, cw-4, Math.max(0, gasBot-gasTop));
+  // Ventile
+  const inOpen = phase === 0 ? Math.sin(a720) * 18 : 0, outOpen = phase === 3 ? Math.sin(a720 - 3*Math.PI) * 18 : 0;
+  [[cx-38, inOpen, 'Einlass', good], [cx+38, outOpen, 'Auslass', bad]].forEach(([x, o, l, c]) => {
+    ex.strokeStyle = o > 1 ? c : line; ex.lineWidth = 4; ex.beginPath(); ex.moveTo(x, topY-60); ex.lineTo(x, topY+o); ex.stroke();
+    ex.fillStyle = o > 1 ? c : line; ex.fillRect(x-18, topY-4+o, 36, 6);
+    ex.fillStyle = mute; ex.font = '12px Segoe UI, sans-serif'; ex.textAlign = 'center'; ex.fillText(l + (o > 1 ? ' offen' : ' zu'), x + (x<cx?-30:30), topY-70); });
+  // Kopf + Zündkerze
+  ex.strokeStyle = text; ex.lineWidth = 3; ex.beginPath(); ex.moveTo(cx-cw/2-10, topY); ex.lineTo(cx+cw/2+10, topY); ex.stroke();
+  ex.fillStyle = line; ex.fillRect(cx-5, topY-50, 10, 46);
+  if (phase === 2 && a720 - 2*Math.PI < 0.5) { ex.fillStyle = css('--warn'); ex.beginPath(); for (let i=0;i<10;i++){ const rr = i%2?8:22, aa = i*Math.PI/5; ex.lineTo(cx+rr*Math.cos(aa), topY+14+rr*Math.sin(aa)); } ex.fill(); }
+  // Kolben
+  ex.fillStyle = bg3; ex.strokeStyle = acc; ex.lineWidth = 2; ex.beginPath(); ex.roundRect(cx-cw/2+4, pistonY-30, cw-8, 56, 6); ex.fill(); ex.stroke();
+  // Pleuel
+  ex.strokeStyle = text; ex.lineWidth = 8; ex.lineCap = 'round'; ex.beginPath(); ex.moveTo(cx, pistonY); ex.lineTo(px, py); ex.stroke();
+  // Kurbel
+  ex.strokeStyle = line; ex.lineWidth = 2; ex.beginPath(); ex.arc(cx, crankY, r+20, 0, 7); ex.stroke();
+  ex.strokeStyle = acc; ex.lineWidth = 10; ex.beginPath(); ex.moveTo(cx, crankY); ex.lineTo(px, py); ex.stroke();
+  ex.fillStyle = text; ex.beginPath(); ex.arc(cx, crankY, 9, 0, 7); ex.fill();
+  // Takt-Leiste
+  PH.forEach((p, i) => { const x = 40 + i * ((W-80)/4); ex.fillStyle = i === phase ? acc : line; ex.fillRect(x, 528, (W-80)/4 - 8, 6);
+    ex.fillStyle = i === phase ? text : mute; ex.font = '600 12px Bahnschrift, sans-serif'; ex.textAlign = 'left'; ex.fillText(`${i+1} ${p[0]}`, x, 518); });
+  ex.fillStyle = mute; ex.textAlign = 'right'; ex.font = '12px Cascadia Mono, monospace'; ex.fillText(`${Math.round(a720*180/Math.PI)}° / 720°`, W-20, 30);
+}
+
+function loop() { if (active === 'netz') drawNet(); if (active === 'motor') drawEngine(); requestAnimationFrame(loop); }
+drawCaesar(); drawRSA(); loop();
+document.addEventListener('wb-theme', () => { drawCaesar(); });
+</script>
+</body></html>

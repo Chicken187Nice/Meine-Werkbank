@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Finanzen</title>
+<style>
+  .month-nav { display:flex; align-items:center; gap:8px; }
+  .month-nav .m { font: 600 18px var(--f-display); min-width: 150px; text-align:center; }
+  .cats .c { display:grid; grid-template-columns: 120px 1fr 90px; gap:10px; align-items:center; padding:6px 0; font-size:14px; }
+  .chart { display:flex; align-items:end; gap:10px; height:170px; padding-top:10px; }
+  .chart .col { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; height:100%; justify-content:end; }
+  .chart .bars { display:flex; gap:3px; align-items:end; height:100%; width:100%; justify-content:center; }
+  .chart .bars i { width:40%; max-width:18px; border-radius:4px 4px 0 0; display:block; min-height:2px; }
+  /* Ausgaben im Diagramm fest orange: --acc ist auf dieser Seite grün (Bereich „Alltag“) */
+  :root { --expense: #ff9b54; } :root[data-phase="mittag"] { --expense: #e2561f; }
+  .chart .in { background: var(--good); } .chart .out { background: var(--expense); }
+  .chart .lbl { font: 500 11px var(--f-mono); color: var(--mute); }
+  .tx-amt { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+  .goal { padding:12px 0; border-bottom:1px solid var(--line); } .goal:last-child { border:0; }
+  .type-toggle button.on.out { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); }
+  .type-toggle button.on.in { background: var(--good); color: #04140c; border-color: var(--good); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">01 · Alltag</div><h1>Finanzen</h1><p>Trag ein, was reinkommt und rausgeht. Die Übersicht rechnet Monat, Kategorien und Sparquote selbst aus.</p></div>
+    <div class="month-nav"><button class="icon" id="prev">‹</button><span class="m" id="mlabel"></span><button class="icon" id="next">›</button></div>
+  </div>
+
+  <div class="g4" id="kpis"></div>
+
+  <div class="side" style="margin-top:14px">
+    <div class="stack">
+      <form class="panel" id="txform">
+        <div class="panel-h"><span class="label">Neue Buchung</span>
+          <div class="tabs type-toggle"><button type="button" data-t="out" class="on out">Ausgabe</button><button type="button" data-t="in" class="in">Einnahme</button></div></div>
+        <div class="stack">
+          <label class="field"><span>Betrag (€)</span><input id="amt" inputmode="decimal" placeholder="0,00" required></label>
+          <label class="field"><span>Kategorie</span><select id="cat"></select></label>
+          <label class="field"><span>Notiz</span><input id="note" placeholder="z. B. Wocheneinkauf"></label>
+          <label class="field"><span>Datum</span><input id="date" type="date"></label>
+          <div class="row" style="flex-wrap:nowrap"><button class="primary grow" id="txBtn">Buchen</button><button type="button" class="ghost hide" id="txCancel">Abbrechen</button></div>
+        </div>
+      </form>
+      <div class="panel">
+        <div class="panel-h"><span class="label">Sparziele</span><button class="sm" id="addGoal">+ Ziel</button></div>
+        <div id="goals"></div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="panel">
+        <div class="panel-h"><span class="label">Letzte 6 Monate</span><span class="row" style="gap:14px;font-size:12px"><span class="row" style="gap:6px"><span class="dot" style="background:var(--good)"></span>Ein</span><span class="row" style="gap:6px"><span class="dot" style="background:var(--expense)"></span>Aus</span></span></div>
+        <div class="chart" id="chart"></div>
+      </div>
+      <div class="g2">
+        <div class="panel"><div class="panel-h"><span class="label">Ausgaben nach Kategorie</span></div><div class="cats" id="cats"></div></div>
+        <div class="panel"><div class="panel-h"><span class="label">Buchungen</span><button class="sm ghost" id="csv">CSV</button></div><div class="list scroll" style="max-height:340px" id="txs"></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<dialog id="goalDlg"><form method="dialog" class="stack">
+  <h3>Sparziel</h3>
+  <label class="field"><span>Name</span><input name="gname" required placeholder="z. B. Neuer Laptop"></label>
+  <div class="fields"><label class="field"><span>Ziel (€)</span><input name="gtarget" inputmode="decimal" required></label>
+  <label class="field"><span>Schon gespart (€)</span><input name="saved" inputmode="decimal" value="0"></label></div>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+</form></dialog>
+
+<script>
+WB.header('finanzen');
+const { $, esc, eur, uid, today, fmtDate, pf, Store, toast, download } = WB;
+const CATS = { out: ['Lebensmittel','Wohnen','Mobilität','Freizeit','Abos','Kleidung','Gesundheit','Technik','Geschenke','Sonstiges'], in: ['Gehalt','Nebenjob','Verkauf','Geschenk','Erstattung','Sonstiges'] };
+let D = { tx: [], goals: [] };
+let type = 'out', editTx = null, editGoal = null;
+function setType(t) { type = t; document.querySelectorAll('.type-toggle button').forEach(x => x.classList.toggle('on', x.dataset.t === t)); fillCats(); }
+function resetForm() { editTx = null; $('#amt').value = ''; $('#note').value = ''; $('#date').value = today(); $('#txBtn').textContent = 'Buchen'; $('#txCancel').classList.add('hide'); }
+let cur = new Date(); cur.setDate(1);
+
+const key = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const save = () => Store.set('finanzen', D);
+
+function fillCats() { $('#cat').innerHTML = CATS[type].map(c => `<option>${c}</option>`).join(''); }
+document.querySelectorAll('.type-toggle button').forEach(b => b.onclick = () => setType(b.dataset.t));
+
+$('#txform').onsubmit = e => {
+  e.preventDefault();
+  const amount = pf($('#amt').value); if (!amount) return toast('Betrag fehlt');
+  const v = { type, amount, cat: $('#cat').value, note: $('#note').value.trim(), date: $('#date').value || today() };
+  if (editTx) { Object.assign(D.tx.find(x => x.id === editTx), v); toast('Geändert'); } else { D.tx.push({ id: uid(), ...v }); toast('Gebucht'); }
+  resetForm(); save(); render(); $('#amt').focus();
+};
+$('#prev').onclick = () => { cur.setMonth(cur.getMonth()-1); render(); };
+$('#next').onclick = () => { cur.setMonth(cur.getMonth()+1); render(); };
+
+function sums(mk) {
+  let i = 0, o = 0; const byCat = {};
+  for (const t of D.tx) if (t.date.startsWith(mk)) {
+    if (t.type === 'in') i += t.amount; else { o += t.amount; byCat[t.cat] = (byCat[t.cat]||0) + t.amount; }
+  }
+  return { i, o, byCat };
+}
+
+function render() {
+  const mk = key(cur);
+  $('#mlabel').textContent = cur.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  const s = sums(mk);
+  const p = new Date(cur); p.setMonth(p.getMonth()-1); const ps = sums(key(p));
+  const diff = ps.o ? ((s.o - ps.o) / ps.o * 100) : 0;
+  const rate = s.i ? ((s.i - s.o) / s.i * 100) : 0;
+  $('#kpis').innerHTML = `
+    <div class="panel stat"><div class="label">Einnahmen</div><div class="v good">${eur(s.i)}</div><div class="s">${D.tx.filter(t=>t.type==='in'&&t.date.startsWith(mk)).length} Buchungen</div></div>
+    <div class="panel stat"><div class="label">Ausgaben</div><div class="v">${eur(s.o)}</div><div class="s">${ps.o ? (diff>0?'▲ ':'▼ ')+Math.abs(diff).toFixed(0)+' % zum Vormonat' : 'kein Vormonat'}</div></div>
+    <div class="panel stat"><div class="label">Bilanz</div><div class="v ${s.i-s.o>=0?'acc':'bad'}">${eur(s.i-s.o)}</div><div class="s">übrig diesen Monat</div></div>
+    <div class="panel stat"><div class="label">Sparquote</div><div class="v">${s.i ? rate.toFixed(0)+' %' : '–'}</div><div class="s">${rate>=20?'stark':'Ziel: 20 %'}</div></div>`;
+
+  // Chart
+  const months = []; for (let k=5;k>=0;k--){ const d=new Date(cur); d.setMonth(d.getMonth()-k); months.push(d); }
+  const data = months.map(d => ({ d, ...sums(key(d)) }));
+  const max = Math.max(1, ...data.map(x => Math.max(x.i, x.o)));
+  $('#chart').innerHTML = data.map(x => `<div class="col" title="${x.d.toLocaleDateString('de-DE',{month:'long'})}: +${eur(x.i)} / −${eur(x.o)}">
+    <div class="bars"><i class="in" style="height:${x.i/max*100}%"></i><i class="out" style="height:${x.o/max*100}%"></i></div>
+    <span class="lbl">${x.d.toLocaleDateString('de-DE',{month:'short'})}</span></div>`).join('');
+
+  // Kategorien
+  const cats = Object.entries(s.byCat).sort((a,b)=>b[1]-a[1]);
+  $('#cats').innerHTML = cats.length ? cats.map(([c,v]) => `<div class="c"><span>${esc(c)}</span><div class="bar"><i style="width:${v/cats[0][1]*100}%"></i></div><span class="mono" style="text-align:right">${eur(v,0)}</span></div>`).join('')
+    : '<div class="empty">Noch keine Ausgaben in diesem Monat</div>';
+
+  // Buchungen
+  const list = D.tx.filter(t => t.date.startsWith(mk)).sort((a,b)=>b.date.localeCompare(a.date));
+  $('#txs').innerHTML = list.length ? list.map(t => `<div class="it">
+    <div class="grow"><div>${esc(t.note || t.cat)}</div><div class="mute" style="font-size:12px">${esc(t.cat)} · ${fmtDate(t.date,{day:'2-digit',month:'short'})}</div></div>
+    <span class="tx-amt ${t.type==='in'?'good':''}">${t.type==='in'?'+':'−'}${eur(t.amount)}</span>
+    <button class="ghost sm" data-edtx="${t.id}" title="Bearbeiten">✎</button><button class="ghost sm danger" data-del="${t.id}" title="Löschen">✕</button></div>`).join('')
+    : '<div class="empty">Keine Buchungen</div>';
+
+  // Ziele (erreichte einmal feiern, dann nicht mehr auf der Startseite melden)
+  D.goals.filter(g => g.saved >= g.target && !g.seen).forEach(g => { g.seen = true; toast('Sparziel erreicht: ' + g.name); save(); });
+  $('#goals').innerHTML = D.goals.length ? D.goals.map(g => {
+    const pct = Math.min(100, g.saved / g.target * 100);
+    return `<div class="goal"><div class="row between"><b>${esc(g.name)}</b><span class="mono mute" style="font-size:12px">${eur(g.saved,0)} / ${eur(g.target,0)}</span></div>
+      <div class="bar" style="margin:8px 0"><i style="width:${pct}%"></i></div>
+      <div class="row"><span class="mute" style="font-size:12px">${pct.toFixed(0)} %</span><span class="grow"></span>
+      <button class="sm" data-dep="${g.id}">+ Einzahlen</button><button class="sm ghost" data-gedit="${g.id}" title="Bearbeiten">✎</button><button class="sm ghost danger" data-gdel="${g.id}">✕</button></div></div>`;
+  }).join('') : '<div class="empty">Leg ein Ziel an, z. B. Notgroschen</div>';
+}
+
+document.addEventListener('click', e => {
+  const t = e.target.closest('button'); if (!t) return;
+  if (t.dataset.del) { if (!confirm('Buchung löschen?')) return; D.tx = D.tx.filter(x => x.id !== t.dataset.del); if (editTx === t.dataset.del) resetForm(); save(); render(); }
+  if (t.dataset.edtx) { const x = D.tx.find(y => y.id === t.dataset.edtx); editTx = x.id; setType(x.type); $('#cat').value = x.cat; $('#amt').value = String(x.amount).replace('.', ',');
+    $('#note').value = x.note || ''; $('#date').value = x.date; $('#txBtn').textContent = 'Änderung speichern'; $('#txCancel').classList.remove('hide'); $('#amt').focus(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  if (t.dataset.gedit) { const g = D.goals.find(x => x.id === t.dataset.gedit); editGoal = g.id; const f = $('#goalDlg').querySelector('form'); f.gname.value = g.name; f.gtarget.value = String(g.target).replace('.', ','); f.saved.value = String(g.saved).replace('.', ','); $('#goalDlg').showModal(); }
+  if (t.dataset.gdel && confirm('Ziel löschen?')) { D.goals = D.goals.filter(x => x.id !== t.dataset.gdel); save(); render(); }
+  if (t.dataset.dep) { const g = D.goals.find(x => x.id === t.dataset.dep); const v = pf(prompt('Wie viel einzahlen (€)?', '50') || 0); if (v) { g.saved += v; save(); render(); toast('Eingezahlt'); } }
+});
+$('#addGoal').onclick = () => { editGoal = null; const d = $('#goalDlg'); d.querySelector('form').reset(); d.showModal(); };
+$('#txCancel').onclick = resetForm;
+$('#goalDlg').addEventListener('close', () => {
+  const d = $('#goalDlg'); if (d.returnValue !== 'ok') return; const f = d.querySelector('form');
+  const v = { name: f.gname.value, target: pf(f.gtarget.value), saved: pf(f.saved.value) };
+  if (editGoal) { const g = D.goals.find(x => x.id === editGoal); Object.assign(g, v); if (g.saved < g.target) g.seen = false; } else D.goals.push({ id: uid(), ...v }); save(); render();
+});
+$('#csv').onclick = () => {
+  const rows = [['Datum','Typ','Kategorie','Notiz','Betrag']].concat(D.tx.sort((a,b)=>a.date.localeCompare(b.date)).map(t => [t.date, t.type==='in'?'Einnahme':'Ausgabe', t.cat, t.note, String(t.amount).replace('.',',')]));
+  download('finanzen.csv', '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n'), 'text/csv');
+};
+
+(async () => { $('#date').value = today(); fillCats(); D = await Store.get('finanzen', D); render(); })();
+</script>
+</body></html>

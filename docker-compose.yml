@@ -1,0 +1,50 @@
+name: werkbank
+
+services:
+  werkbank:
+    build: .
+    container_name: werkbank
+    ports:
+      # Laptop: http://localhost:8081 nur lokal. Server (start.sh): von überall im Heimnetz, leitet automatisch auf HTTPS um.
+      - "${WB_HTTP_BIND:-127.0.0.1}:${WB_HTTP_PORT:-8081}:8080"
+      - "${WB_HTTPS_BIND:-0.0.0.0}:${WB_HTTPS_PORT:-8443}:8443"   # verschlüsselt (HTTPS) für Handy/anderen PC im Heimnetz (nur IPv4, damit die echte IP ankommt)
+    volumes:
+      - werkbank-daten:/data    # Nutzer, Einstellungen, verschlüsselte Nachrichten
+      - ./status:/hoststatus:ro # Serverdaten vom Sammler (host/sammeln.py), nur lesend. Kein Docker-Socket im Container.
+    environment:
+      - TZ=Europe/Berlin
+      # Name des ersten Kontos bei der Ersteinrichtung (eigener Wert gehört in .env, nicht ins Git)
+      - WB_OWNER=${WB_OWNER:-admin}
+      - WB_HOST_DIR=/hoststatus
+      # Für HTTPS aus dem Heimnetz: Namen/IPs fürs Zertifikat (start.sh trägt die Server-IP automatisch in .env ein)
+      - WB_TLS_SAN=${WB_TLS_SAN:-DNS:localhost,IP:127.0.0.1}
+      - WB_HTTPS_PUBLIC_PORT=${WB_HTTPS_PORT:-8443}
+      # Nur aktivieren, wenn Caddy (unten) davor läuft. Öffnet den internen Eingang 8082 (nie unter "ports" eintragen):
+      - WB_TRUST_PROXY=${WB_TRUST_PROXY:-0}
+      # Jellyfin auf demselben Server. Nur die Werkbank spricht mit dieser Adresse, nie der Browser.
+      - WB_JELLYFIN_URL=${WB_JELLYFIN_URL:-http://host.docker.internal:8096}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  # ---- Optional: aus dem Internet erreichbar, mit echtem Let's-Encrypt-Zertifikat ----
+  # Start:  set WB_DOMAIN=deine-domain.de  &&  set WB_TRUST_PROXY=1  &&  docker compose --profile internet up -d --build
+  # Voraussetzung: Domain (z. B. kostenlos bei DuckDNS) zeigt auf deine Internet-IP, Router leitet Port 80 und 443 an den Laptop weiter.
+  caddy:
+    image: caddy:2
+    profiles: ["internet"]
+    container_name: werkbank-caddy
+    ports:
+      - "127.0.0.1:80:80"
+      - "127.0.0.1:443:443"
+    environment:
+      - WB_DOMAIN=${WB_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-daten:/data
+    depends_on: [werkbank]
+    restart: unless-stopped
+
+volumes:
+  werkbank-daten:
+  caddy-daten:

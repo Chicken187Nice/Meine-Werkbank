@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Abo-Killer</title>
+<style>
+  .abo { display:grid; grid-template-columns: 6px 1fr auto auto; gap:14px; align-items:center; padding:14px 16px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg); }
+  .abo + .abo { margin-top:8px; }
+  .abo .rail { align-self:stretch; border-radius:3px; background: var(--line2); }
+  .abo.soon .rail { background: var(--bad); } .abo.mid .rail { background: var(--warn); } .abo.ok .rail { background: var(--good); }
+  .abo.dead { opacity:.55; } .abo.dead .rail { background: var(--faint); }
+  .abo .price { font: 600 16px var(--f-mono); text-align:right; }
+  .deadline { font: 600 13px var(--f-mono); }
+  .use { display:inline-flex; gap:2px; } .use button { padding:2px 6px; font-size:11px; }
+  .use button.on { background: var(--acc); color: var(--acc-ink); border-color: var(--acc); }
+  @media (max-width:640px){ .abo { grid-template-columns: 6px 1fr; } .abo > :nth-child(n+3){ grid-column: 2; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">02 · Alltag</div><h1>Abo-Killer</h1><p>Jedes Abo mit Verlängerungsdatum und Kündigungsfrist. Rot heißt: jetzt entscheiden. Die Fristen kannst du als Kalenderdatei mit Erinnerung exportieren.</p></div>
+    <div class="row"><button id="ics">Fristen → Kalender (.ics)</button><button class="primary" id="add">+ Abo</button></div>
+  </div>
+  <div class="g4" id="kpis"></div>
+  <div class="side" style="margin-top:14px">
+    <div class="stack">
+      <div class="panel"><div class="panel-h"><span class="label">Kill-Kandidaten</span></div><div id="kill"></div>
+        <p class="mute" style="font-size:12px;margin-top:10px">Bewerte bei jedem Abo, wie oft du es nutzt. Teure, selten genutzte Abos landen hier.</p></div>
+      <div class="panel"><div class="panel-h"><span class="label">Nach Kategorie / Monat</span></div><div id="bycat"></div></div>
+    </div>
+    <div class="panel"><div class="panel-h"><span class="label">Abos nach nächster Frist</span>
+      <div class="tabs" id="filter"><button class="on" data-f="aktiv">Aktiv</button><button data-f="gekuendigt">Gekündigt</button></div></div>
+      <div id="list"></div></div>
+  </div>
+</main>
+
+<dialog id="dlg"><form method="dialog" class="stack" id="f">
+  <h3 id="dlgT">Abo</h3>
+  <label class="field"><span>Name</span><input name="aname" required placeholder="z. B. Streaming, Fitnessstudio"></label>
+  <div class="fields">
+    <label class="field"><span>Preis (€)</span><input name="price" inputmode="decimal" required></label>
+    <label class="field"><span>Abrechnung</span><select name="interval"><option value="1">monatlich</option><option value="3">vierteljährlich</option><option value="6">halbjährlich</option><option value="12">jährlich</option></select></label>
+  </div>
+  <div class="fields">
+    <label class="field"><span>Nächste Verlängerung</span><input name="renew" type="date" required></label>
+    <label class="field"><span>Kündigungsfrist</span><div class="row" style="flex-wrap:nowrap"><input name="notice" type="number" min="0" value="1" style="width:70px"><select name="unit"><option value="d">Tage</option><option value="w">Wochen</option><option value="m" selected>Monate</option></select></div></label>
+  </div>
+  <label class="field"><span>Kategorie</span><input name="cat" list="cats" placeholder="Streaming"></label>
+  <datalist id="cats"><option>Streaming</option><option>Musik</option><option>Software</option><option>Fitness</option><option>Mobilfunk</option><option>Versicherung</option><option>Zeitung</option><option>Gaming</option><option>Cloud</option></datalist>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+</form></dialog>
+
+<script>
+WB.header('abos');
+const { $, esc, eur, uid, today, ymd, parseYmd, fmtDate, daysBetween, pf, Store, toast, download } = WB;
+let D = { abos: [] }, editId = null, filter = 'aktiv';
+const save = () => Store.set('abos', D);
+
+const addMonths = (s, m) => { const d = parseYmd(s); const day = d.getDate(); d.setDate(1); d.setMonth(d.getMonth() + m); d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth()+1, 0).getDate())); return ymd(d); };
+const minusNotice = (s, n, u) => { const d = parseYmd(s); if (u === 'd') d.setDate(d.getDate()-n); else if (u === 'w') d.setDate(d.getDate()-7*n); else d.setMonth(d.getMonth()-n); return ymd(d); };
+const monthly = a => a.price / a.interval;
+
+function calc(a) {
+  const t = today(); let r = a.renew;
+  while (r < t) r = addMonths(r, a.interval);
+  let dl = minusNotice(r, a.notice, a.unit), missed = false;
+  if (dl < t) { missed = true; r = addMonths(r, a.interval); dl = minusNotice(r, a.notice, a.unit); }
+  return { renew: r, deadline: dl, days: daysBetween(t, dl), missed };
+}
+
+function render() {
+  const act = D.abos.filter(a => !a.cancelled), canc = D.abos.filter(a => a.cancelled);
+  const m = act.reduce((s,a) => s + monthly(a), 0);
+  const saved = canc.reduce((s,a) => s + monthly(a)*12, 0);
+  const next = act.map(a => ({ a, ...calc(a) })).sort((x,y) => x.deadline.localeCompare(y.deadline));
+  $('#kpis').innerHTML = `
+    <div class="panel stat"><div class="label">Pro Monat</div><div class="v">${eur(m)}</div><div class="s">${act.length} aktive Abos</div></div>
+    <div class="panel stat"><div class="label">Pro Jahr</div><div class="v acc">${eur(m*12,0)}</div><div class="s">≈ ${(m*12/ (D.hourly||15)).toFixed(0)} Arbeitsstunden à ${eur(D.hourly||15,0)}</div></div>
+    <div class="panel stat"><div class="label">Nächste Frist</div><div class="v">${next[0] ? next[0].days + ' T' : '–'}</div><div class="s">${next[0] ? esc(next[0].a.name) + ' · ' + fmtDate(next[0].deadline) : 'keine'}</div></div>
+    <div class="panel stat"><div class="label">Gespart / Jahr</div><div class="v good">${eur(saved,0)}</div><div class="s">durch ${canc.length} Kündigungen</div></div>`;
+
+  const shown = filter === 'aktiv' ? next : canc.map(a => ({ a }));
+  $('#list').innerHTML = shown.length ? shown.map(({ a, renew, deadline, days, missed }) => {
+    const cls = a.cancelled ? 'dead' : days <= 14 ? 'soon' : days <= 45 ? 'mid' : 'ok';
+    return `<div class="abo ${cls}"><span class="rail"></span>
+      <div><div style="font-weight:600">${esc(a.name)} <span class="chip" style="margin-left:6px">${esc(a.cat||'Sonstiges')}</span></div>
+      <div class="mute" style="font-size:13px;margin-top:3px">${a.cancelled ? 'gekündigt am ' + fmtDate(a.cancelled) :
+        `Kündigen bis <span class="deadline ${days<=14?'bad':''}">${fmtDate(deadline)}</span> (${days === 0 ? 'heute!' : 'in ' + days + ' Tagen'}) · verlängert ${fmtDate(renew)}${missed ? ' · <span class="warn">aktuelle Frist verpasst</span>' : ''}`}</div>
+      ${a.cancelled ? '' : `<div class="row" style="margin-top:8px;gap:6px"><span class="mute" style="font-size:12px">Nutzung:</span><span class="use">${['selten','manchmal','oft'].map((l,i) => `<button class="sm ${a.use===i?'on':''}" data-use="${a.id}" data-v="${i}">${l}</button>`).join('')}</span></div>`}</div>
+      <div class="price">${eur(a.price)}<div class="mute" style="font:12px var(--f-body)">${{1:'/ Monat',3:'/ Quartal',6:'/ Halbjahr',12:'/ Jahr'}[a.interval]}</div></div>
+      <div class="row" style="gap:4px">${a.cancelled ? `<button class="sm" data-re="${a.id}">Reaktivieren</button>` : `<button class="sm" data-kill="${a.id}">Gekündigt ✓</button><button class="sm ghost" data-edit="${a.id}">Bearbeiten</button>`}<button class="sm ghost danger" data-del="${a.id}">✕</button></div>
+    </div>`;
+  }).join('') : `<div class="empty">${filter==='aktiv' ? 'Noch keine Abos. Fang mit dem teuersten an.' : 'Noch nichts gekündigt.'}</div>`;
+
+  const kill = act.filter(a => a.use === 0 || a.use === 1).sort((x,y) => (monthly(y)*(2-y.use)) - (monthly(x)*(2-x.use))).slice(0,4);
+  $('#kill').innerHTML = kill.length ? `<div class="list">${kill.map(a => `<div class="it"><span class="grow">${esc(a.name)}<div class="mute" style="font-size:12px">${a.use===0?'selten':'manchmal'} genutzt</div></span><span class="mono">${eur(monthly(a)*12,0)}/J</span></div>`).join('')}</div>`
+    : '<div class="empty" style="padding:18px">Keine Kandidaten</div>';
+
+  const by = {}; act.forEach(a => by[a.cat||'Sonstiges'] = (by[a.cat||'Sonstiges']||0) + monthly(a));
+  const arr = Object.entries(by).sort((a,b)=>b[1]-a[1]);
+  $('#bycat').innerHTML = arr.length ? arr.map(([c,v]) => `<div style="margin-bottom:10px"><div class="row between" style="font-size:13px"><span>${esc(c)}</span><span class="mono">${eur(v)}</span></div><div class="bar" style="margin-top:5px"><i style="width:${v/arr[0][1]*100}%"></i></div></div>`).join('') : '<div class="empty" style="padding:18px">–</div>';
+}
+
+function openDlg(a) {
+  editId = a ? a.id : null; const f = $('#f'); f.reset();
+  $('#dlgT').textContent = a ? 'Abo bearbeiten' : 'Neues Abo';
+  if (a) { f.aname.value = a.name; f.price.value = String(a.price).replace('.',','); f.interval.value = a.interval; f.renew.value = a.renew; f.notice.value = a.notice; f.unit.value = a.unit; f.cat.value = a.cat||''; }
+  else f.renew.value = addMonths(today(), 1);
+  $('#dlg').showModal();
+}
+$('#add').onclick = () => openDlg();
+$('#dlg').addEventListener('close', () => {
+  if ($('#dlg').returnValue !== 'ok') return; const f = $('#f');
+  const v = { name: f.aname.value.trim(), price: pf(f.price.value), interval: +f.interval.value, renew: f.renew.value, notice: +f.notice.value, unit: f.unit.value, cat: f.cat.value.trim() };
+  if (editId) Object.assign(D.abos.find(a => a.id === editId), v); else D.abos.push({ id: uid(), use: null, ...v });
+  save(); render(); toast('Gespeichert');
+});
+$('#filter').onclick = e => { const b = e.target.closest('button'); if (!b) return; filter = b.dataset.f; [...$('#filter').children].forEach(x => x.classList.toggle('on', x === b)); render(); };
+document.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; const d = b.dataset; const a = D.abos.find(x => x.id === (d.edit||d.del||d.kill||d.re||d.use));
+  if (d.edit) openDlg(a);
+  if (d.del && confirm('Abo löschen?')) { D.abos = D.abos.filter(x => x !== a); save(); render(); }
+  if (d.kill) { a.cancelled = today(); save(); render(); toast('Stark. ' + eur(monthly(a)*12,0) + ' pro Jahr gespart'); }
+  if (d.re) { delete a.cancelled; save(); render(); }
+  if (d.use) { a.use = +d.v; save(); render(); }
+});
+$('#ics').onclick = () => {
+  const act = D.abos.filter(a => !a.cancelled); if (!act.length) return toast('Keine aktiven Abos');
+  const stamp = new Date().toISOString().replace(/[-:]/g,'').slice(0,15) + 'Z';
+  const ev = act.map(a => { const c = calc(a); const d = c.deadline.replace(/-/g,''); const n = ymd(new Date(parseYmd(c.deadline).getTime()+864e5)).replace(/-/g,'');
+    return `BEGIN:VEVENT\r\nUID:${a.id}-${d}@werkbank\r\nDTSTAMP:${stamp}\r\nDTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${n}\r\nSUMMARY:Kündigungsfrist: ${a.name} (${eur(a.price)})\r\nDESCRIPTION:Letzter Tag zum Kündigen. Verlängert sich sonst am ${fmtDate(c.renew)}.\r\nBEGIN:VALARM\r\nTRIGGER:-P7D\r\nACTION:DISPLAY\r\nDESCRIPTION:${a.name} in 7 Tagen kündigen?\r\nEND:VALARM\r\nEND:VEVENT`; }).join('\r\n');
+  download('abo-fristen.ics', `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Werkbank//Abo-Killer//DE\r\n${ev}\r\nEND:VCALENDAR`, 'text/calendar');
+};
+(async () => { D = await Store.get('abos', D); render(); })();
+</script>
+</body></html>

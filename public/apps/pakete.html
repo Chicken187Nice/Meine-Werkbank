@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<title>Pakete</title>
+<style>
+  .pk { display:flex; gap:14px; align-items:center; flex-wrap:wrap; padding:14px 2px; border-bottom:1px solid var(--line); } .pk:last-child { border:0; }
+  .pk .main { flex:1; min-width:220px; } .pk select { width:auto; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">01 · Alltag</div><h1>Pakete</h1><p>Sendungsnummer eintragen, zum Beispiel für Outfit-Bestellungen. DHL meldet den Stand selbst, wenn ein Schlüssel hinterlegt ist.</p></div>
+  </div>
+  <div class="side">
+    <div class="stack">
+      <form class="panel" id="add">
+        <div class="panel-h"><span class="label">Neue Sendung</span></div>
+        <div class="stack">
+          <label class="field"><span>Sendungsnummer</span><input id="nr" required maxlength="40" autocomplete="off"></label>
+          <label class="field"><span>Versanddienst</span><select id="dienst"></select></label>
+          <label class="field"><span>Inhalt / Shop</span><input id="inhalt" maxlength="80" placeholder="z. B. Hoodie von Pegador" list="shops"><datalist id="shops"><option>Zalando</option><option>ABOUT YOU</option><option>ASOS</option><option>Pegador</option><option>mnml</option><option>REPRESENT</option><option>asphaltgold</option></datalist></label>
+          <button class="primary">Hinzufügen</button>
+        </div>
+      </form>
+      <form class="panel hide" id="keyF">
+        <div class="panel-h"><span class="label">DHL-Schlüssel (Admin)</span></div>
+        <div class="stack">
+          <p class="mute" style="font-size:13px" id="keyInfo"></p>
+          <label class="field"><span>API-Key von developer.dhl.com („Shipment Tracking - Unified“)</span><input id="key" type="password" autocomplete="off"></label>
+          <div class="row"><button class="primary grow">Speichern</button><button type="button" class="ghost danger hide" id="keyDel">Entfernen</button></div>
+          <p class="mute" style="font-size:12px">Mit Schlüssel schickt die Werkbank deine DHL-Sendungsnummern an DHL.</p>
+        </div>
+      </form>
+    </div>
+    <div class="stack">
+      <div class="panel"><div class="panel-h"><span class="label">Unterwegs</span></div><div id="open"></div></div>
+      <div class="panel"><div class="panel-h"><span class="label">Erledigt</span></div><div id="done"></div></div>
+    </div>
+  </div>
+</main>
+<script>
+WB.header('pakete');
+const { $, esc, uid, today, fmtDate, api, Store, toast, editForm } = WB;
+const E = encodeURIComponent;
+const DIENST = {
+  dhl: ['DHL', n => 'https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=' + E(n)],
+  hermes: ['Hermes', n => 'https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#' + E(n)],
+  dpd: ['DPD', n => 'https://tracking.dpd.de/status/de_DE/parcel/' + E(n)],
+  gls: ['GLS', n => 'https://gls-group.com/DE/de/paketverfolgung?match=' + E(n)],
+  ups: ['UPS', n => 'https://www.ups.com/track?loc=de_DE&tracknum=' + E(n)],
+  amazon: ['Amazon', () => 'https://www.amazon.de/gp/css/order-history'],
+  sonstige: ['Sonstige', n => 'https://parcelsapp.com/de/tracking/' + E(n)]
+};
+const STAND = { bestellt: 'Bestellt', unterwegs: 'Unterwegs', zustellung: 'In Zustellung', abholbereit: 'Abholbereit', zugestellt: 'Zugestellt' };
+const LIVE = { 'pre-transit': 'Angekündigt', transit: 'Unterwegs', delivered: 'Zugestellt', failure: 'Problem', unknown: 'Unbekannt' };
+const opts = (o, v) => Object.entries(o).map(([k, t]) => `<option value="${k}" ${k === v ? 'selected' : ''}>${esc(Array.isArray(t) ? t[0] : t)}</option>`).join('');
+let D = { pakete: [] }, S = { key: false, admin: false, status: {} };
+const save = () => { Store.set('pakete', D); return Store.flush(); };
+function row(p) {
+  const d = DIENST[p.dienst] || DIENST.sonstige, c = p.dienst === 'dhl' ? S.status[p.nr] : null;
+  const live = c && c.code ? `<span class="chip ${c.code === 'failure' ? 'bad' : c.code === 'delivered' ? 'on' : ''}">${esc(LIVE[c.code] || c.code)}</span>` : '';
+  const info = c ? [c.text, c.place, c.time && fmtDate(c.time, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }), c.error].filter(Boolean).join(' · ') : p.dienst === 'dhl' && S.key && !p.done ? 'Wird bei DHL abgefragt …' : '';
+  return `<div class="pk"><div class="main"><div><b>${esc(p.inhalt || p.nr)}</b> ${live}</div><div class="mute" style="font-size:12px">${esc(d[0])} · <span class="mono">${esc(p.nr)}</span> · seit ${fmtDate(p.added, { day: '2-digit', month: '2-digit' })}</div>
+      ${info ? `<div style="font-size:13px;margin-top:4px" class="${c?.error ? 'bad' : ''}">${esc(info)}</div>` : ''}</div>
+    ${live || p.done ? '' : `<select data-stand="${esc(p.id)}" aria-label="Stand">${opts(STAND, p.stand)}</select>`}
+    <a class="btn sm" href="${esc(d[1](p.nr))}" target="_blank" rel="noopener noreferrer">Verfolgen ↗</a>
+    <button class="sm ghost" data-done="${esc(p.id)}">${p.done ? 'Wieder öffnen' : '✓ Erledigt'}</button>
+    <button class="sm ghost" data-ed="${esc(p.id)}" title="Bearbeiten">✎</button><button class="sm ghost danger" data-del="${esc(p.id)}" title="Löschen">✕</button></div>`;
+}
+function render() {
+  const open = D.pakete.filter(p => !p.done), done = D.pakete.filter(p => p.done);
+  $('#open').innerHTML = open.length ? open.map(row).join('') : '<div class="empty">Gerade ist nichts unterwegs</div>';
+  $('#done').innerHTML = done.length ? done.map(row).join('') : '<div class="empty">Noch nichts erledigt</div>';
+  $('#keyF').classList.toggle('hide', !S.admin); $('#keyDel').classList.toggle('hide', !S.key);
+  $('#keyInfo').textContent = S.key ? 'Ein Schlüssel ist hinterlegt. Neuer Stand etwa alle 2 Stunden.' : 'Ohne Schlüssel setzt du den Stand selbst und folgst dem Link.';
+}
+async function status() { try { S = await api('/api/pakete/status'); render(); if (S.pending) setTimeout(status, 8000); } catch (e) { toast(e.message); } }
+const changed = async () => { render(); await save(); status(); };
+const clean = v => v.replace(/[\s-]/g, '').toUpperCase();
+$('#nr').oninput = e => { const v = clean(e.target.value); if (v.startsWith('1Z')) $('#dienst').value = 'ups'; else if (/^(JJD|00340)/.test(v)) $('#dienst').value = 'dhl'; };
+$('#add').onsubmit = e => {
+  e.preventDefault(); const nr = clean($('#nr').value);
+  if (!/^[A-Z0-9]{8,40}$/.test(nr)) return toast('Nummer: 8 bis 40 Buchstaben oder Ziffern');
+  if (D.pakete.some(p => p.nr === nr)) return toast('Diese Nummer steht schon in der Liste');
+  D.pakete.unshift({ id: uid(), nr, dienst: $('#dienst').value, inhalt: $('#inhalt').value.trim(), stand: 'unterwegs', added: today(), done: false });
+  $('#nr').value = ''; $('#inhalt').value = ''; changed(); toast('Hinzugefügt');
+};
+document.addEventListener('change', e => { const s = e.target.closest('[data-stand]'); if (!s) return; const p = D.pakete.find(x => x.id === s.dataset.stand); p.stand = s.value; if (s.value === 'zugestellt') p.done = true; changed(); });
+document.addEventListener('click', async e => {
+  const t = e.target.closest('button'); if (!t) return;
+  const p = D.pakete.find(x => x.id === (t.dataset.done || t.dataset.ed || t.dataset.del));
+  if (t.dataset.done) { p.done = !p.done; if (!p.done && p.stand === 'zugestellt') p.stand = 'unterwegs'; changed(); }
+  if (t.dataset.del && confirm('Sendung löschen?')) { D.pakete = D.pakete.filter(x => x !== p); changed(); }
+  if (t.dataset.ed) { const v = await editForm('Sendung bearbeiten', [{ k: 'inhalt', l: 'Inhalt / Shop', v: p.inhalt }, { k: 'nr', l: 'Sendungsnummer', v: p.nr, req: true }, { k: 'dienst', l: 'Versanddienst', type: 'select', v: p.dienst, opts: Object.entries(DIENST).map(([k, d]) => [k, d[0]]) }]);
+    if (!v || v === 'delete') return; const nr = clean(v.nr); if (!/^[A-Z0-9]{8,40}$/.test(nr)) return toast('Nummer: 8 bis 40 Buchstaben oder Ziffern'); Object.assign(p, v, { nr }); changed(); }
+});
+const setKey = async key => { try { await api('/api/pakete/schluessel', { method: 'PUT', body: { key } }); $('#key').value = ''; toast(key ? 'Schlüssel gespeichert' : 'Schlüssel entfernt'); status(); } catch (e) { toast(e.message); } };
+$('#keyF').onsubmit = e => { e.preventDefault(); const k = $('#key').value.trim(); if (k) setKey(k); };
+$('#keyDel').onclick = () => { if (confirm('DHL-Schlüssel entfernen?')) setKey(''); };
+(async () => { $('#dienst').innerHTML = opts(DIENST, 'dhl'); D = await Store.get('pakete', D); render(); status(); setInterval(() => { if (!document.hidden) status(); }, 300000); })();
+</script>
+</body></html>
