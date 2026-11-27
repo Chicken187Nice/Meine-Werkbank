@@ -12,8 +12,13 @@
 !/docker-compose.yml
 !/Caddyfile
 !/README.md
+!/ANLEITUNG.md
+!/LICENSE
+!/.gitattributes
 !/server.js
 !/jellyfin.js
+!/bericht.js
+!/werkzeug/*.py
 !/start.sh
 !/stop.sh
 !/sichern.sh

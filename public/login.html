@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/passwort-hilfe.js"></script>
 <title>Anmelden · Werkbank</title>
 <style>
   body { display:grid; place-items:center; min-height:100vh; padding: 20px; }
@@ -14,6 +14,8 @@
   .brand i::after { content:''; width: 8px; height: 8px; background: var(--acc); border-radius: 2px; }
   .right { padding: 40px; }
   .msg { font-size: 13px; padding: 10px 12px; border-radius: 9px; background: color-mix(in srgb, var(--bad) 14%, var(--bg)); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+  .msg > div { margin-top: 5px; color: var(--text); line-height: 1.45; }
+  .msg.info { background: color-mix(in srgb, var(--acc) 12%, var(--bg)); color: var(--text); border-color: color-mix(in srgb, var(--acc) 45%, transparent); }
   .msg.ok { background: color-mix(in srgb, var(--good) 14%, var(--bg)); color: var(--good); border-color: color-mix(in srgb, var(--good) 40%, transparent); }
   @media (max-width: 760px) { .box { grid-template-columns: 1fr; } .left { border-right: 0; border-bottom: 1px solid var(--line); padding: 28px; gap: 20px; } .right { padding: 28px; } }
 </style>
@@ -26,7 +28,7 @@
   </div>
   <form class="right stack" id="f" autocomplete="on">
     <div><div class="label" id="kicker">Anmelden</div><h2 style="margin-top:8px" id="title">Willkommen zurück</h2></div>
-    <div id="msg"></div>
+    <div id="msg" aria-live="polite"></div>
     <label class="field" id="nameF"><span>Nutzername</span><input id="name" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
     <label class="field" id="passF"><span>Passwort</span><input id="pass" type="password" autocomplete="current-password" required></label>
     <label class="field hide" id="pass2F"><span>Passwort wiederholen</span><input id="pass2" type="password" autocomplete="new-password"></label>
@@ -44,32 +46,44 @@ const next = (() => { const n = qs.get('next') || '/'; return /^\/(?!\/)/.test(n
 function tick() { const d = new Date(); $('#clock').textContent = d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); $('#phase').textContent = PHASE_NAME[applyTheme()]; }
 tick(); setInterval(tick, 5000);
-const msg = (t, ok) => $('#msg').innerHTML = t ? `<div class="msg ${ok ? 'ok' : ''}">${WB.esc(t)}</div>` : '';
-if (qs.has('bye')) msg('Du wurdest überall abgemeldet.', true);
+// kind: '' = Fehler, 'ok', 'info'
+function msg(title, kind = '', hint = '', retryMin) { const box = $('#msg'); box.replaceChildren(); if (!title) return;
+  const d = document.createElement('div'); d.className = 'msg ' + kind; WBPass.fill(d, title, hint, retryMin); box.appendChild(d); }
+if (qs.has('bye')) msg('Du wurdest überall abgemeldet.', 'ok', 'Melde dich mit Name und Passwort neu an.');
+else if (qs.get('grund') === 'abgemeldet') msg('Du bist nicht mehr angemeldet.', 'info', 'Das passiert, wenn die Sitzung abgelaufen ist oder ein Admin dein Passwort neu gesetzt hat. Melde dich neu an.');
+WBPass.attach($('#pass'), { neu: true, active: () => setup || resetMode, repeat: $('#pass2'), name: () => $('#name').value.trim() });
 fetch('/api/auth/state').then(r => r.json()).then(s => { if (!s.setup) return $('#name').focus();
   setup = true; $('#kicker').textContent = 'Ersteinrichtung'; $('#title').textContent = 'Hallo ' + s.owner + '!';
-  $('#name').value = s.owner; $('#name').readOnly = true; $('#pass2F').classList.remove('hide'); $('#pass2').required = true; $('#pass').autocomplete = 'new-password';
+  $('#name').value = s.owner; $('#name').readOnly = true; msg(''); $('#pass2F').classList.remove('hide'); $('#pass2').required = true; $('#pass').autocomplete = 'new-password';
   $('#btn').textContent = 'Owner-Konto anlegen'; $('#foot').textContent = 'Du wirst Owner und Admin. Nur du kannst weitere Nutzer anlegen. Mindestens 10 Zeichen, gern eine Passphrase.'; $('#pass').focus(); });
-const post = async (u, b) => { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify(b) }); const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.error || 'Fehler'); return d; };
-$('#forgot').onclick = () => { resetMode = !resetMode; need2fa = false; msg('');
+const fehler = (title, hint, retryMin) => Object.assign(new Error(title), { hint, retryMin });
+const post = async (u, b) => { let r; try { r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify(b) }); }
+  catch { throw fehler('Server nicht erreichbar', 'Prüfe deine Verbindung und versuch es gleich noch einmal.'); }
+  const d = await r.json().catch(() => ({})); if (!r.ok) throw fehler(d.error || 'Fehler ' + r.status, d.hint, d.retryMin); return d; };
+$('#forgot').onclick = () => { resetMode = !resetMode; need2fa = false; msg(''); $('#code').value = ''; $('#passF').nextElementSibling.classList.remove('hide'); setTimeout(() => $('#pass').dispatchEvent(new Event('input')));
   $('#title').textContent = resetMode ? 'Passwort zurücksetzen' : 'Willkommen zurück'; $('#kicker').textContent = resetMode ? 'Mit Zwei-Faktor-Code' : 'Anmelden';
   $('#nameF').classList.remove('hide'); $('#passF').classList.toggle('hide', false); $('#pass2F').classList.toggle('hide', !resetMode); $('#pass2').required = resetMode;
   $('#codeF').classList.toggle('hide', !resetMode); $('#passF').querySelector('span').textContent = resetMode ? 'Neues Passwort' : 'Passwort'; $('#pass').autocomplete = resetMode ? 'new-password' : 'current-password';
   $('#btn').textContent = resetMode ? 'Neues Passwort setzen' : 'Anmelden'; $('#forgot').textContent = resetMode ? '← Zurück zur Anmeldung' : 'Passwort vergessen?';
   $('#foot').textContent = resetMode ? 'Geht nur, wenn du Zwei-Faktor eingerichtet hast. Sonst setzt dir der Admin ein neues Passwort. Achtung: Alte Messenger-Nachrichten sind danach nicht mehr lesbar.' : 'Ein Login für alle Seiten. Du bleibst angemeldet, bis du dich abmeldest. An fremden Geräten bitte abmelden.'; };
-$('#f').onsubmit = async e => { e.preventDefault(); msg(''); $('#btn').disabled = true;
+$('#f').onsubmit = async e => { e.preventDefault(); msg(''); const label = $('#btn').textContent; $('#btn').disabled = true; $('#btn').textContent = 'Prüfe …';
+  const frei = () => { $('#btn').disabled = false; if ($('#btn').textContent === 'Prüfe …') $('#btn').textContent = label; };
+  const gleich = () => { if ($('#pass').value !== $('#pass2').value) throw fehler('Die Passwörter stimmen nicht überein', 'Gib in beiden Feldern genau dasselbe ein.'); };
   try {
-    if (resetMode) { if ($('#pass').value !== $('#pass2').value) throw new Error('Passwörter stimmen nicht überein');
+    if (resetMode) { gleich();
       const d = await post('/api/auth/reset', { name: $('#name').value, code: $('#code').value, pass: $('#pass').value });
-      $('#forgot').click(); $('#pass').value = ''; msg('Passwort geändert. Du kannst dich jetzt anmelden.' + (d.recoveryLeft != null && d.recoveryLeft < 3 ? ` Nur noch ${d.recoveryLeft} Wiederherstellungscodes übrig, erzeug unter Konto neue.` : ''), true); $('#btn').disabled = false; return; }
-    if (setup) { if ($('#pass').value !== $('#pass2').value) throw new Error('Passwörter stimmen nicht überein');
-      const r = await fetch('/api/auth/setup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ pass: $('#pass').value }) });
-      const d = await r.json(); if (!r.ok) throw new Error(d.error); location.href = '/'; return; }
-    const r = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ name: $('#name').value, pass: $('#pass').value, code: need2fa ? $('#code').value : undefined }) });
-    const d = await r.json(); if (!r.ok) throw new Error(d.error);
-    if (d.need2fa) { need2fa = true; $('#codeF').classList.remove('hide'); $('#nameF').classList.add('hide'); $('#passF').classList.add('hide'); $('#title').textContent = 'Zweiter Faktor'; $('#btn').textContent = 'Bestätigen'; $('#code').focus(); $('#btn').disabled = false; return; }
-    location.href = d.mustChange || d.setup2fa ? '/apps/konto' : next;
-  } catch (err) { msg(err.message); $('#btn').disabled = false; if (need2fa) { $('#code').value = ''; $('#code').focus(); } }
+      $('#forgot').click(); $('#pass').value = $('#pass2').value = ''; $('#pass').dispatchEvent(new Event('input')); frei(); msg('Passwort geändert.', 'ok', 'Melde dich jetzt mit dem neuen Passwort und einem Code an. Alle Geräte wurden abgemeldet.' + (d.recoveryLeft != null && d.recoveryLeft < 3 ? ` Nur noch ${d.recoveryLeft} Wiederherstellungscodes übrig, erzeug unter Konto neue.` : '')); return; }
+    if (setup) { gleich(); await post('/api/auth/setup', { pass: $('#pass').value }); location.href = '/'; return; }
+    const d = await post('/api/auth/login', { name: $('#name').value, pass: $('#pass').value, code: need2fa ? $('#code').value : undefined });
+    if (d.need2fa) { need2fa = true; $('#codeF').classList.remove('hide'); $('#nameF').classList.add('hide'); $('#passF').classList.add('hide'); $('#passF').nextElementSibling.classList.add('hide'); $('#title').textContent = 'Zweiter Faktor'; $('#btn').textContent = 'Bestätigen'; $('#code').focus(); $('#btn').disabled = false;
+      msg('Passwort stimmt.', 'ok', 'Gib jetzt den 6-stelligen Code aus deiner Authenticator-App ein.'); return; }
+    msg('Angemeldet.', 'ok', d.mustChange ? 'Als Nächstes legst du ein eigenes Passwort fest …' : d.setup2fa ? 'Als Nächstes richtest du Zwei-Faktor ein …' : 'Einen Moment …');
+    if (d.mustChange || d.setup2fa) { location.href = '/apps/konto'; return; }
+    // Eigene Wahl: nach dem Anmelden direkt eine App öffnen (nur wenn kein anderes Ziel gewünscht war)
+    let to = next;
+    if (to === '/') try { const u = await fetch('/api/data/ui', { cache: 'no-store' }).then(r => r.json()); const id = u && WB.normalizePrefs(u).startApp; if (id) to = '/apps/' + id; } catch {}
+    location.href = to;
+  } catch (err) { msg(err.message, '', err.hint, err.retryMin); frei(); if (need2fa) { $('#code').value = ''; $('#code').focus(); } }
 };
 </script>
 </body></html>

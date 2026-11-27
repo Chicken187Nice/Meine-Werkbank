@@ -3,7 +3,7 @@
 		listener_wrappers {
 			proxy_protocol {
 				timeout 5s
-				allow 0.0.0.0/0
+				allow {$WB_PROXY_ALLOW:172.16.0.0/12}
 			}
 			tls
 		}

@@ -35,10 +35,13 @@ services:
     profiles: ["internet"]
     container_name: werkbank-caddy
     ports:
-      - "127.0.0.1:80:80"
-      - "127.0.0.1:443:443"
+      # Standard: nur lokal (Tunnel wie playit auf diesem Rechner). Bei Portfreigabe im Router WB_PUBLIC_BIND=0.0.0.0 in .env.
+      - "${WB_PUBLIC_BIND:-127.0.0.1}:80:80"
+      - "${WB_PUBLIC_BIND:-127.0.0.1}:443:443"
     environment:
       - WB_DOMAIN=${WB_DOMAIN:-localhost}
+      # Nur aus diesen Netzen wird die Besucher-IP im PROXY-Kopf geglaubt
+      - WB_PROXY_ALLOW=${WB_PROXY_ALLOW:-172.16.0.0/12}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-daten:/data

@@ -50,6 +50,13 @@ const checkPw = (pw, stored) => new Promise(ok => {
   const [, N, s, h] = (stored || 'scrypt$32768$AAAAAAAAAAAAAAAAAAAAAA==$' + 'A'.repeat(86) + '==').split('$');
   crypto.scrypt(pw, Buffer.from(s, 'base64'), 64, { ...SCRYPT, N: +N }, (e, k) => {
     const hb = Buffer.from(h, 'base64'); ok(!e && !!stored && hb.length === k.length && crypto.timingSafeEqual(hb, k)); }); });
+// Erzeugte Einmalpasswörter (16 Zeichen in Vierergruppen, ⟳ in der Verwaltung): Bindestriche und Leerzeichen sind
+// beim Eingeben egal. Selbst gewählte Passwörter zählen weiter genau so, wie sie sind.
+function pwVariants(p) {
+  const bare = p.replace(/[\s\-\u2010-\u2015\u2212]/g, '');
+  return /^[A-HJ-NP-Za-km-np-z2-9]{16}$/.test(bare) ? [...new Set([p, bare.match(/.{4}/g).join('-'), bare])] : [p];
+}
+async function matchPw(p, stored) { for (const v of pwVariants(p)) if (await checkPw(v, stored)) return true; return false; }
 const COMMON = ['passwort', 'password', '123456', '12345678', '123456789', 'qwertz', 'qwerty', 'hallo', 'letmein', 'iloveyou', 'admin', 'welcome', 'werkbank', OWNER, 'sommer', 'winter', 'fussball', 'schatz', 'abc123', 'baller'];
 function pwPolicy(p, name) {
   if (typeof p !== 'string' || p.length < 10 || p.length > 200) return 'Passwort: mindestens 10 Zeichen';
@@ -136,6 +143,23 @@ function recordFail(kind, key) {
   guard[k] = g; saveGuard();
 }
 const clearFails = (...keys) => { keys.forEach(k => delete guard[k]); saveGuard(); };
+// Wie viele Fehlversuche bis zur nächsten Sperre bleiben und wie lange sie dann dauert (zählt wie recordFail)
+function triesLeft(pairs) {
+  const now = Date.now(); let best = null;
+  for (const [kind, key] of pairs) { const g = guard[kind + ':' + key], [lim, min] = RULES[kind], left = lim - (g && now - g.first <= 3600e3 ? g.n : 0);
+    if (!best || left < best.left) best = { left, min: min * Math.min(8, 2 ** ((g && g.level) || 0)) }; }
+  return best;
+}
+const triesText = t => `${t.left === 1 ? 'Noch 1 Versuch' : `Noch ${t.left} Versuche`}, danach ist die Anmeldung ${t.min} Min. gesperrt.`;
+const LOCK_HINT = 'Auch das richtige Passwort wird bis dahin abgelehnt. Ein Admin kann die Sperre sofort aufheben.';
+const errLocked = (res, min, more = '') => err(res, 429, `Zu viele Fehlversuche. Bitte in ${min} Min. erneut versuchen.`, { retryMin: min, hint: (more ? more + ' ' : '') + LOCK_HINT });
+// Längste laufende Sperre eines Namens in Millisekunden seit 1970 (0 = keine)
+const userLock = name => { const now = Date.now(); return Math.max(0, ...Object.entries(guard).filter(([k, g]) => g.until > now && (k === 'acct:' + name || k === 'reset:' + name || k.startsWith('ipacct:' + name + '|'))).map(([, g]) => g.until)); };
+// Sperren und Zähler eines Namens entfernen (neues Passwort durch den Admin, neu angelegtes Konto); meldet, ob eine Sperre lief
+function clearUserLocks(name) {
+  const keys = Object.keys(guard).filter(k => k === 'acct:' + name || k === 'reset:' + name || k.startsWith('ipacct:' + name + '|'));
+  const active = keys.some(k => guard[k].until > Date.now()); if (keys.length) clearFails(...keys); return active;
+}
 setInterval(() => { const now = Date.now(); let ch = false; for (const [k, g] of Object.entries(guard)) if (g.until < now && now - g.first > 24 * 3600e3) { delete guard[k]; ch = true; } if (ch) saveGuard(); }, 3600e3);
 const slow = () => new Promise(r => setTimeout(r, 600 + Math.random() * 600));
 // Bekannte Geräte
@@ -169,12 +193,13 @@ function send(res, code, body, type = 'application/json; charset=utf-8') {
   res.writeHead(code, { 'Content-Type': type, 'Cache-Control': 'no-store', ...SEC });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
-const err = (res, code, msg) => send(res, code, { error: msg });
+// error = kurze Meldung, hint = genauere Erklärung darunter
+const err = (res, code, msg, more) => send(res, code, { error: msg, ...more });
 const readBody = (req, limit = 4 * 1024 * 1024) => new Promise((ok, no) => { let size = 0; const ch = [];
   req.on('data', c => { size += c.length; if (size > limit) { no(new Error('Anfrage zu groß')); req.destroy(); } else ch.push(c); });
   req.on('end', () => ok(Buffer.concat(ch).toString('utf8'))); req.on('error', no); });
 const json = async req => { const b = await readBody(req); try { return b ? JSON.parse(b) : {}; } catch { throw new Error('Ungültiges JSON'); } };
-const page = (res, code, title, text) => send(res, code, `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script><title>${title}</title></head><body><main class="wrap" style="padding-top:12vh;max-width:560px"><div class="label">${code}</div><h1 style="margin:8px 0 12px">${title}</h1><p class="mute">${text}</p><p style="margin-top:22px"><a class="btn primary" href="/">Zur Werkbank</a></p></main></body></html>`, 'text/html; charset=utf-8');
+const page = (res, code, title, text) => send(res, code, `<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><title>${title}</title></head><body><main class="wrap" style="padding-top:12vh;max-width:560px"><div class="label">${code}</div><h1 style="margin:8px 0 12px">${title}</h1><p class="mute">${text}</p><p style="margin-top:22px"><a class="btn primary" href="/">Zur Werkbank</a></p></main></body></html>`, 'text/html; charset=utf-8');
 const userDir = uid => path.join(DATA, 'u', uid);
 
 // ---------- Protokoll: Zugriffe auf die Werkbank und Anmeldeversuche ----------
@@ -234,13 +259,14 @@ if (!fs.existsSync(LOGIN_FILE)) {
 // ---------- RSS ----------
 const decode = s => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').replace(/<[^>]+>/g, ' ')
   .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  .replace(/&nbsp;/g, ' ').replace(/&(bdquo|ldquo|rdquo);/g, '"').replace(/&(ndash|mdash);/g, '–').replace(/&hellip;/g, '…')
+  .replace(/&#x([0-9a-f]{1,6});/gi, (_, n) => String.fromCodePoint(Math.min(parseInt(n, 16), 0x10ffff))).replace(/&#(\d{1,7});/g, (_, n) => String.fromCodePoint(Math.min(+n, 0x10ffff))).replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
 const tag = (x, t) => { const m = x.match(new RegExp(`<${t}[^>]*>([\\s\\S]*?)</${t}>`, 'i')); return m ? decode(m[1]) : ''; };
 function parseFeed(xml, source) {
   const blocks = xml.match(/<item[\s>][\s\S]*?<\/item>/gi) || xml.match(/<entry[\s>][\s\S]*?<\/entry>/gi) || [];
   return blocks.slice(0, 80).map(b => { let link = tag(b, 'link'); if (!link) { const m = b.match(/<link[^>]*href="([^"]+)"/i); link = m ? m[1] : ''; }
     const t = Date.parse(tag(b, 'pubDate') || tag(b, 'published') || tag(b, 'updated') || tag(b, 'dc:date'));
-    return { title: tag(b, 'title'), link: /^https?:\/\//.test(link) ? link : '', summary: (tag(b, 'description') || tag(b, 'summary') || tag(b, 'content')).slice(0, 280), date: isNaN(t) ? null : new Date(t).toISOString(), source }; });
+    return { title: tag(b, 'title').slice(0, 300), link: /^https?:\/\//.test(link) ? link.slice(0, 1000) : '', summary: (tag(b, 'description') || tag(b, 'summary') || tag(b, 'content')).replace(/<\/?[a-z][^>]*>/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 700), date: isNaN(t) ? null : new Date(t).toISOString(), source }; });
 }
 const dnsP = require('dns').promises;
 async function publicHost(url) { const h = new URL(url).hostname.replace(/^\[|\]$/g, ''); const addrs = net.isIP(h) ? [h] : (await dnsP.lookup(h, { all: true })).map(a => a.address);
@@ -251,26 +277,41 @@ async function fetchFeed(url, name) {
   const ctrl = new AbortController(); const to = setTimeout(() => ctrl.abort(), 12000);
   try { let r = await fetch(url, { signal: ctrl.signal, redirect: 'manual', headers: { 'User-Agent': 'Werkbank/1.0 (+RSS)' } });
     for (let i = 0; i < 3 && r.status >= 300 && r.status < 400 && r.headers.get('location'); i++) { const nu = new URL(r.headers.get('location'), url).href; await publicHost(nu); r = await fetch(nu, { signal: ctrl.signal, redirect: 'manual', headers: { 'User-Agent': 'Werkbank/1.0 (+RSS)' } }); }
-    return parseFeed((await r.text()).slice(0, 3e6), name || new URL(url).hostname); }
+    // Zeichensatz aus Kopfzeile oder XML-Angabe, sonst gehen Umlaute kaputt
+    const raw = Buffer.from(await r.arrayBuffer()).subarray(0, 3e6);
+    const cs = (/charset=["']?([\w-]+)/i.exec(r.headers.get('content-type') || '') || /^[^>]*encoding=["']([\w-]+)/i.exec(raw.subarray(0, 200).toString('latin1')) || [])[1] || 'utf-8';
+    let xml; try { xml = new TextDecoder(cs).decode(raw); } catch { xml = raw.toString('utf8'); }
+    return parseFeed(xml, name || new URL(url).hostname); }
   finally { clearTimeout(to); }
 }
 const isoWeek = d => { const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const day = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - day);
   const y = new Date(Date.UTC(x.getUTCFullYear(), 0, 1)); return `${x.getUTCFullYear()}-W${String(Math.ceil(((x - y) / 864e5 + 1) / 7)).padStart(2, '0')}`; };
-async function buildReport(cfg) {
-  const kw = (cfg.keywords || []).map(k => String(k).toLowerCase()).filter(Boolean), since = Date.now() - 7 * 864e5, all = [], errors = [];
-  await Promise.all((cfg.feeds || []).slice(0, 30).map(async f => { try { all.push(...await fetchFeed(f.url, f.name)); } catch { errors.push(f.name || f.url); } }));
-  const seen = new Set();
-  const items = all.filter(i => { if (!i.title || seen.has(i.title)) return false; seen.add(i.title); if (i.date && Date.parse(i.date) < since) return false;
-    if (!kw.length) return true; const h = (i.title + ' ' + i.summary).toLowerCase(); i.matched = kw.filter(k => h.includes(k)); return i.matched.length > 0; })
-    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  return { week: isoWeek(new Date()), created: new Date().toISOString(), keywords: kw, errors, items: items.slice(0, 150) };
+const bericht = require('./bericht.js');
+const poolFile = id => path.join(userDir(id), 'news', 'pool.json');
+const feedsOf = cfg => (Array.isArray(cfg.feeds) ? cfg.feeds : []).filter(f => f && typeof f.url === 'string').slice(0, 30);
+const reportOpts = cfg => ({ keywords: Array.isArray(cfg.keywords) ? cfg.keywords : [], only: cfg.only === true, count: [5, 7, 10].includes(cfg.count) ? cfg.count : 7 });
+// Holt die Quellen ab und legt alles zum Bestand der letzten sieben Tage
+async function collectNews(id, cfg, cache) {
+  const fresh = [], errors = [], feeds = feedsOf(cfg);
+  await Promise.all(feeds.map(async f => { try { const k = f.url + '\n' + (f.name || ''); const p = cache?.get(k) || fetchFeed(f.url, f.name); cache?.set(k, p); fresh.push(...(await p).map(i => ({ ...i, feed: f.url }))); } catch { errors.push(f.name || f.url); } }));
+  const urls = new Set(feeds.map(f => f.url));
+  const pool = bericht.mergePool(readJSON(poolFile(id), []).filter(i => urls.has(i.feed)), fresh);
+  writeJSON(poolFile(id), pool);
+  return { pool, errors };
 }
+async function buildReport(id, cfg) {
+  const { pool, errors } = await collectNews(id, cfg), o = reportOpts(cfg);
+  return { v: 2, week: isoWeek(new Date()), created: new Date().toISOString(), keywords: o.keywords, only: o.only, errors, ...bericht.summarize(pool, o) };
+}
+let reporting = false;
 async function autoReports() {
-  const now = new Date(); if (now.getDay() === 1 && now.getHours() < 7) return;
-  for (const u of users) { if (!u.active || !canApp(u, 'wochenbericht')) continue;
-    const cfg = readJSON(path.join(userDir(u.id), 'wochenbericht.json'), null); if (!cfg || !cfg.auto || !(cfg.feeds || []).length) continue;
-    const f = path.join(userDir(u.id), 'reports', isoWeek(now) + '.json'); if (fs.existsSync(f)) continue;
-    try { writeJSON(f, await buildReport(cfg)); console.log('Wochenbericht', u.name, isoWeek(now)); } catch (e) { console.error(e.message); } }
+  if (reporting) return; reporting = true;
+  try { const now = new Date(), cache = new Map(), early = now.getDay() === 1 && now.getHours() < 7;
+    for (const u of users) { if (!u.active || !canApp(u, 'wochenbericht')) continue;
+      const cfg = readJSON(path.join(userDir(u.id), 'wochenbericht.json'), null); if (!cfg || !cfg.auto || !feedsOf(cfg).length) continue;
+      const f = path.join(userDir(u.id), 'reports', isoWeek(now) + '.json');
+      try { if (early || fs.existsSync(f)) await collectNews(u.id, cfg, cache); else { writeJSON(f, await buildReport(u.id, cfg)); console.log('Wochenbericht', u.name, isoWeek(now)); } } catch (e) { console.error('Wochenbericht', e.message); } } }
+  finally { reporting = false; }
 }
 setInterval(autoReports, 3600e3); setTimeout(autoReports, 20000);
 
@@ -516,7 +557,7 @@ on('POST', /^\/api\/auth\/setup$/, async (q, res) => {
   // Ersteinrichtung nur aus dem eigenen Netz, nie aus dem Internet
   if (viaProxy(q.req) || (!isPrivateIp(ipOf(q.req)) && process.env.WB_ALLOW_REMOTE_SETUP !== '1')) { log('setup-blockiert', OWNER, ipOf(q.req)); loginLog(q.req, OWNER, 'setup-blockiert'); return err(res, 403, 'Die Ersteinrichtung geht nur aus dem eigenen Netz'); }
   const b = await json(q.req); const pe = pwPolicy(b.pass, OWNER); if (pe) return err(res, 400, pe);
-  const u = { id: crypto.randomBytes(8).toString('hex'), name: OWNER, hash: await hashPw(b.pass), admin: true, owner: true, apps: [...APPS], active: true, mustChange: false, sessionHours: 0, created: new Date().toISOString() };
+  const u = { id: crypto.randomBytes(8).toString('hex'), name: OWNER, pwAt: new Date().toISOString(), pwBy: OWNER, hash: await hashPw(b.pass), admin: true, owner: true, apps: [...APPS], active: true, mustChange: false, sessionHours: 0, created: new Date().toISOString() };
   users.push(u); rememberDevice(res, q.req, u); saveUsers(); log('setup', u.name, ipOf(q.req)); loginLog(q.req, u.name, 'setup'); newSession(res, q.req, u); send(res, 200, { ok: true });
 }, { open: true });
 
@@ -524,12 +565,17 @@ on('POST', /^\/api\/auth\/login$/, async (q, res) => {
   const b = await json(q.req); const name = String(b.name || '').trim().toLowerCase().slice(0, 40); const ip = ipOf(q.req);
   const u = users.find(x => x.name === name); const known = devOk(q.req, u);
   const lk = lockLeft(['ipacct:' + name + '|' + ip, 'ip:' + ip, ...(known ? [] : ['acct:' + name])]);
-  if (lk) { await slow(); log('login-gesperrt', name, ip); loginLog(q.req, name, 'gesperrt'); return err(res, 429, `Zu viele Fehlversuche. Bitte in ${lk} Min. erneut versuchen.`); }
-  const ok = await checkPw(String(b.pass || ''), u && u.hash);
-  const failNow = async (msg, ev) => { recordFail('ipacct', name + '|' + ip); recordFail('acct', name); recordFail('ip', ip); log(ev, name, ip); loginLog(q.req, name, ev === '2fa-fehler' ? 'code-falsch' : 'passwort', u ? {} : { unbekannt: true }); await slow(); return err(res, 401, msg); };
+  if (lk) { await slow(); log('login-gesperrt', name, ip); loginLog(q.req, name, 'gesperrt'); return errLocked(res, lk); }
+  const ok = await matchPw(String(b.pass || ''), u && u.hash);
+  const failNow = async (msg, ev) => { recordFail('ipacct', name + '|' + ip); recordFail('acct', name); recordFail('ip', ip); log(ev, name, ip); loginLog(q.req, name, ev === '2fa-fehler' ? 'code-falsch' : 'passwort', u ? {} : { unbekannt: true });
+    // Zählt für bekannte und unbekannte Namen gleich, verrät also nicht, ob es das Konto gibt
+    const keys = [['ipacct', name + '|' + ip], ...(known ? [] : [['acct', name]]), ['ip', ip]]; const now = lockLeft(keys.map(k => k.join(':'))); await slow();
+    const help = ev === '2fa-fehler' ? 'Nimm den aktuellen 6-stelligen Code aus der App. Jeder Code gilt nur einmal, warte notfalls auf den nächsten. Stimmt die Uhrzeit am Handy? Ein Wiederherstellungscode geht auch.'
+      : 'Achte auf Groß- und Kleinschreibung. Beim erzeugten Einmalpasswort sind die Bindestriche egal. Wurde dein Passwort gerade neu gesetzt, lösche ein vom Browser vorausgefülltes altes.';
+    return now ? err(res, 401, msg, { retryMin: now, hint: `Das war ein Versuch zu viel: Die Anmeldung ist jetzt ${now} Min. gesperrt. ${LOCK_HINT}` }) : err(res, 401, msg, { hint: help + ' ' + triesText(triesLeft(keys)) }); };
   if (!u || !ok) return failNow('Name oder Passwort falsch', 'login-fehler');
-  if (!u.active) { log('login-deaktiviert', name, ip); loginLog(q.req, name, 'deaktiviert'); return err(res, 403, 'Dieser Zugang ist deaktiviert'); }
-  if (expired(u)) { log('login-abgelaufen', name, ip); loginLog(q.req, name, 'abgelaufen'); return err(res, 403, 'Dieser Zugang ist abgelaufen'); }
+  if (!u.active) { log('login-deaktiviert', name, ip); loginLog(q.req, name, 'deaktiviert'); return err(res, 403, 'Dieser Zugang ist deaktiviert', { hint: 'Name und Passwort stimmen. Bitte einen Admin, den Zugang wieder zu aktivieren.' }); }
+  if (expired(u)) { log('login-abgelaufen', name, ip); loginLog(q.req, name, 'abgelaufen'); return err(res, 403, 'Dieser Zugang ist abgelaufen', { hint: 'Name und Passwort stimmen. Bitte einen Admin, das Ablaufdatum zu verlängern.' }); }
   if (u.totp && u.totp.enabled) { if (!b.code) { loginLog(q.req, name, 'code-nötig'); return send(res, 200, { need2fa: true }); } if (!secondFactor(u, b.code)) return failNow('Code falsch', '2fa-fehler'); }
   clearFails('ipacct:' + name + '|' + ip); if (!known) log('login-neues-gerät', name, ip, String(q.req.headers['user-agent'] || '').slice(0, 80));
   u.lastLogin = new Date().toISOString(); rememberDevice(res, q.req, u); saveUsers(); log('login', name, ip); loginLog(q.req, name, 'ok', known ? {} : { neu: true });
@@ -539,13 +585,13 @@ on('POST', /^\/api\/auth\/login$/, async (q, res) => {
 // Passwort vergessen: nur mit zweitem Faktor (Authenticator-Code oder Wiederherstellungscode)
 on('POST', /^\/api\/auth\/reset$/, async (q, res) => {
   const b = await json(q.req); const name = String(b.name || '').trim().toLowerCase().slice(0, 40); const ip = ipOf(q.req);
-  const lk = lockLeft(['reset:' + name, 'reset:' + ip, 'ip:' + ip]); if (lk) { await slow(); loginLog(q.req, name, 'gesperrt'); return err(res, 429, `Zu viele Versuche. Bitte in ${lk} Min. erneut versuchen.`); }
+  const lk = lockLeft(['reset:' + name, 'reset:' + ip, 'ip:' + ip]); if (lk) { await slow(); loginLog(q.req, name, 'gesperrt'); return err(res, 429, `Zu viele Versuche. Bitte in ${lk} Min. erneut versuchen.`, { retryMin: lk, hint: 'Ein Admin kann die Sperre aufheben oder dir ein neues Passwort setzen.' }); }
   const u = users.find(x => x.name === name);
   if (!u || !u.active || expired(u) || !(u.totp && u.totp.enabled) || !secondFactor(u, b.code)) {
     recordFail('reset', name); recordFail('reset', ip); recordFail('ip', ip); log('reset-fehler', name, ip); loginLog(q.req, name, 'reset-fehler'); await slow();
     return err(res, 401, 'Das hat nicht geklappt. Zurücksetzen geht nur mit eingerichteter Zwei-Faktor-Anmeldung, sonst frag den Admin.'); }
   const pe = pwPolicy(b.pass, name); if (pe) { saveUsers(); return err(res, 400, pe); }
-  u.hash = await hashPw(b.pass); u.mustChange = false; saveUsers(); killSessions(u.id);
+  u.hash = await hashPw(b.pass); u.mustChange = false; u.pwAt = new Date().toISOString(); u.pwBy = u.name; saveUsers(); killSessions(u.id);
   fs.rmSync(path.join(DATA, 'msg/keys', u.id + '.json'), { force: true }); pushAll({ type: 'keys' });
   clearFails('reset:' + name, 'acct:' + name, 'ipacct:' + name + '|' + ip); log('passwort-selbst-zurückgesetzt', name, ip); loginLog(q.req, name, 'reset-ok');
   send(res, 200, { ok: true, recoveryLeft: (u.recovery || []).length });
@@ -555,8 +601,9 @@ on('POST', /^\/api\/auth\/logout$/, (q, res) => { delete sessions[q.sess.key]; s
 on('POST', /^\/api\/auth\/logout-all$/, (q, res) => { killSessions(q.u.id); q.u.devices = []; saveUsers(); log('logout-überall', q.u.name, ipOf(q.req)); setCookie(res, q.req, '', 0); send(res, 200, { ok: true }); }, { anyState: true });
 on('GET', /^\/api\/auth\/me$/, (q, res) => send(res, 200, { user: { ...pub(q.u), recoveryLeft: q.u.totp && q.u.totp.enabled ? (q.u.recovery || []).length : null } }), { anyState: true });
 const reauth = async (q, res, pass) => { const k = q.u.name + '|' + ipOf(q.req);
-  if (lockLeft(['ipacct:' + k, 'acct:' + q.u.name])) { await slow(); err(res, 429, 'Zu viele Fehlversuche'); return false; }
-  if (!await checkPw(String(pass || ''), q.u.hash)) { recordFail('ipacct', k); recordFail('acct', q.u.name); await slow(); err(res, 401, 'Passwort falsch'); return false; } return true; };
+  const lk = lockLeft(['ipacct:' + k, 'acct:' + q.u.name]); if (lk) { await slow(); errLocked(res, lk); return false; }
+  if (!await matchPw(String(pass || ''), q.u.hash)) { recordFail('ipacct', k); recordFail('acct', q.u.name); const now = lockLeft(['ipacct:' + k, 'acct:' + q.u.name]); await slow();
+    err(res, 403, 'Passwort falsch', now ? { retryMin: now, hint: `Das war ein Versuch zu viel: ${now} Min. Sperre. ${LOCK_HINT}` } : { hint: 'Gemeint ist das Passwort, mit dem du dich zuletzt angemeldet hast. Füllt dein Browser es automatisch aus, tipp es lieber selbst ein. ' + triesText(triesLeft([['ipacct', k], ['acct', q.u.name]])) }); return false; } return true; }; // nie 401: das hieße „nicht angemeldet“
 on('POST', /^\/api\/auth\/name$/, async (q, res) => { const b = await json(q.req);
   if (b.skip) { q.u.nameAsked = true; saveUsers(); return send(res, 200, { ok: true }); }
   const n = String(b.display ?? '').normalize('NFKC').replace(/\s+/g, ' ').trim();
@@ -568,8 +615,8 @@ on('POST', /^\/api\/auth\/name$/, async (q, res) => { const b = await json(q.req
 on('POST', /^\/api\/auth\/verify$/, async (q, res) => { const b = await json(q.req); if (await reauth(q, res, b.pass)) send(res, 200, { ok: true }); }, { anyState: true });
 on('POST', /^\/api\/auth\/password$/, async (q, res) => {
   const b = await json(q.req); if (!await reauth(q, res, b.old)) return;
-  const pe = pwPolicy(b.pass, q.u.name); if (pe) return err(res, 400, pe); if (b.pass === b.old) return err(res, 400, 'Neues Passwort muss anders sein');
-  q.u.hash = await hashPw(b.pass); q.u.mustChange = false; saveUsers();
+  const pe = pwPolicy(b.pass, q.u.name); if (pe) return err(res, 400, pe); if (await matchPw(b.pass, q.u.hash)) return err(res, 400, 'Neues Passwort muss anders sein', { hint: 'Wähle eines, das du noch nicht benutzt, nicht das bisherige.' });
+  q.u.hash = await hashPw(b.pass); q.u.mustChange = false; q.u.pwAt = new Date().toISOString(); q.u.pwBy = q.u.name; saveUsers();
   const kf = path.join(DATA, 'msg/keys', q.u.id + '.json');
   if (b.vault && fs.existsSync(kf)) { const rec = readJSON(kf, null); if (rec && b64ok(b.vault.ct, 20000)) { rec.blob = b.vault; writeJSON(kf, rec); } }
   killSessions(q.u.id, q.sess.key); log('passwort-geändert', q.u.name, ipOf(q.req)); send(res, 200, { ok: true });
@@ -580,7 +627,7 @@ on('POST', /^\/api\/auth\/totp\/begin$/, async (q, res) => { const b = await jso
   if (!await reauth(q, res, b.pass)) return;
   const secret = b32enc(crypto.randomBytes(20)); q.u.totp = { secret, enabled: false }; saveUsers();
   send(res, 200, { secret, uri: `otpauth://totp/Werkbank:${encodeURIComponent(q.u.name)}?secret=${secret}&issuer=Werkbank&digits=6&period=30` }); }, { anyState: true });
-on('POST', /^\/api\/auth\/totp\/enable$/, async (q, res) => { const b = await json(q.req); if (!q.u.totp || q.u.totp.enabled || !totpUse(q.u, b.code)) { recordFail('ipacct', q.u.name + '|' + ipOf(q.req)); return err(res, 400, 'Code passt nicht, Uhrzeit am Handy prüfen'); }
+on('POST', /^\/api\/auth\/totp\/enable$/, async (q, res) => { const b = await json(q.req); if (!q.u.totp || q.u.totp.enabled || !totpUse(q.u, b.code)) { recordFail('ipacct', q.u.name + '|' + ipOf(q.req)); return err(res, 400, 'Code passt nicht, Uhrzeit am Handy prüfen', { hint: 'Nimm den aktuellen 6-stelligen Code zum Eintrag „Werkbank“. Hast du mehrere solche Einträge, gilt nur der mit dem Schlüssel, der gerade angezeigt wird.' }); }
   q.u.totp.enabled = true; const codes = newRecovery(q.u); saveUsers(); log('2fa-aktiviert', q.u.name, ipOf(q.req)); send(res, 200, { ok: true, recovery: codes }); }, { anyState: true });
 on('POST', /^\/api\/auth\/totp\/disable$/, async (q, res) => { const b = await json(q.req); if (needs2fa(q.u)) return err(res, 403, 'Zwei-Faktor ist für dein Konto Pflicht'); if (!await reauth(q, res, b.pass)) return;
   if (!q.u.totp || !secondFactor(q.u, b.code)) { recordFail('ipacct', q.u.name + '|' + ipOf(q.req)); return err(res, 400, 'Code falsch'); }
@@ -606,24 +653,30 @@ const sanitize = (b, actor, target) => {
   if (target && target.owner) { delete o.admin; delete o.active; delete o.apps; delete o.expires; delete o.cockpit; }
   return o;
 };
-on('GET', /^\/api\/admin\/users$/, (q, res) => send(res, 200, { apps: APPS, users: users.map(u => ({ ...pub(u), sessions: Object.values(sessions).filter(s => s.uid === u.id).length, msgKey: fs.existsSync(path.join(DATA, 'msg/keys', u.id + '.json')) })) }), adminOnly);
+on('GET', /^\/api\/admin\/users$/, (q, res) => send(res, 200, { apps: APPS, users: users.map(u => ({ ...pub(u), sessions: Object.values(sessions).filter(s => s.uid === u.id).length, msgKey: fs.existsSync(path.join(DATA, 'msg/keys', u.id + '.json')), pwAt: u.pwAt || null, pwBy: u.pwBy || null, lockedUntil: userLock(u.name) || null })) }), adminOnly);
+on('POST', /^\/api\/admin\/users\/([a-f0-9]+)\/entsperren$/, (q, res, m) => { const t = findUser(m[1]); if (!t) return err(res, 404, 'Nicht gefunden');
+  if (t.admin && !q.u.owner && t.id !== q.u.id) return err(res, 403, 'Nur der Owner bearbeitet Admins');
+  if (!clearUserLocks(t.name)) return err(res, 404, 'Für diesen Namen läuft keine Sperre'); log('sperre-aufgehoben', q.u.name, ipOf(q.req), 'Verwaltung · ' + t.name); send(res, 200, { ok: true }); }, adminOnly);
 on('POST', /^\/api\/admin\/users$/, async (q, res) => {
   const b = await json(q.req); const name = String(b.name || '').trim().toLowerCase();
   if (!/^[a-z0-9._-]{2,32}$/.test(name)) return err(res, 400, 'Name: 2–32 Zeichen, nur a–z, 0–9, Punkt, Bindestrich, Unterstrich');
   if (nameTaken(name)) return err(res, 400, 'Name ist schon vergeben');
   const pe = pwPolicy(b.pass); if (pe) return err(res, 400, pe);
   let o; try { o = sanitize({ apps: [], active: true, mustChange: true, sessionHours: 0, ...b }, q.u); } catch (e) { return err(res, 403, e.message); }
-  const u = { id: crypto.randomBytes(8).toString('hex'), name, hash: await hashPw(b.pass), admin: false, owner: false, created: new Date().toISOString(), ...o };
-  users.push(u); saveUsers(); log('nutzer-angelegt', q.u.name, ipOf(q.req), name); send(res, 200, pub(u));
+  const u = { id: crypto.randomBytes(8).toString('hex'), name, hash: await hashPw(b.pass), admin: false, owner: false, created: new Date().toISOString(), pwAt: new Date().toISOString(), pwBy: q.u.name, ...o };
+  users.push(u); saveUsers(); clearUserLocks(name); log('nutzer-angelegt', q.u.name, ipOf(q.req), name); send(res, 200, pub(u));
 }, adminOnly);
 on('PUT', /^\/api\/admin\/users\/([a-f0-9]+)$/, async (q, res, m) => {
   const t = findUser(m[1]); if (!t) return err(res, 404, 'Nicht gefunden');
   if (t.admin && !q.u.owner && t.id !== q.u.id) return err(res, 403, 'Nur der Owner bearbeitet Admins');
   const b = await json(q.req); let o; try { o = sanitize(b, q.u, t); } catch (e) { return err(res, 403, e.message); }
   if (t.id === q.u.id) { delete o.admin; delete o.active; }
+  // Erst alles prüfen, dann ändern: Eine abgelehnte Anfrage darf nichts übernehmen
+  let hash = null; if (b.pass) { const pe = pwPolicy(b.pass); if (pe) return err(res, 400, pe); hash = await hashPw(b.pass); }
   Object.assign(t, o);
-  if (b.pass) { const pe = pwPolicy(b.pass); if (pe) return err(res, 400, pe); t.hash = await hashPw(b.pass); t.mustChange = b.mustChange !== undefined ? !!b.mustChange : true;
-    fs.rmSync(path.join(DATA, 'msg/keys', t.id + '.json'), { force: true }); pushAll({ type: 'keys' }); killSessions(t.id); log('passwort-zurückgesetzt', q.u.name, ipOf(q.req), t.name); }
+  if (hash) { t.hash = hash; t.pwAt = new Date().toISOString(); t.pwBy = q.u.name; t.mustChange = b.mustChange !== undefined ? !!b.mustChange : true;
+    fs.rmSync(path.join(DATA, 'msg/keys', t.id + '.json'), { force: true }); pushAll({ type: 'keys' }); killSessions(t.id); log('passwort-zurückgesetzt', q.u.name, ipOf(q.req), t.name);
+    if (clearUserLocks(t.name)) log('sperre-aufgehoben', q.u.name, ipOf(q.req), 'neues Passwort · ' + t.name); }
   if (!t.active || expired(t)) killSessions(t.id);
   // Live-Verbindungen kappen, sobald etwas nicht mehr erlaubt ist
   if (setup2fa(t) || !canApp(t, 'messenger')) for (const [k, s] of Object.entries(sessions)) if (s.uid === t.id) closeStreams(k);
@@ -644,7 +697,7 @@ on('POST', /^\/api\/admin\/users\/([a-f0-9]+)\/reset-2fa$/, (q, res, m) => { con
 on('GET', /^\/api\/admin\/audit$/, (q, res) => send(res, 200, audit.slice(-400).reverse()), adminOnly);
 
 // Daten pro Nutzer
-const keyApp = k => k === 'hub' || k === 'cockpit' ? true : APPS.includes(k) ? k : null;
+const keyApp = k => k === 'hub' || k === 'cockpit' || k === 'ui' || k === 'uibild' ? true : APPS.includes(k) ? k : null;
 on('GET', /^\/api\/data\/([a-z0-9_-]{1,40})$/, (q, res, m) => { const a = keyApp(m[1]); if (!a || (a !== true && !canApp(q.u, a))) return err(res, 403, 'Kein Zugriff');
   const f = path.join(userDir(q.u.id), m[1] + '.json'); send(res, 200, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : 'null'); }); // noch nichts gespeichert ist kein Fehler
 on('PUT', /^\/api\/data\/([a-z0-9_-]{1,40})$/, async (q, res, m) => { const a = keyApp(m[1]); if (!a || (a !== true && !canApp(q.u, a))) return err(res, 403, 'Kein Zugriff');
@@ -659,10 +712,13 @@ on('GET', /^\/api\/feed$/, async (q, res) => { let items;
   try { items = await fetchFeed(q.url.searchParams.get('url') || '', q.url.searchParams.get('name')); }
   catch (e) { return err(res, 400, /^(nur http|Interne)/.test(e.message) ? e.message : 'Feed nicht erreichbar, bitte die Adresse prüfen'); }
   send(res, 200, items); }, wb);
-on('POST', /^\/api\/news\/build$/, async (q, res) => { const cfg = readJSON(path.join(userDir(q.u.id), 'wochenbericht.json'), { feeds: [] }); const r = await buildReport(cfg);
+on('POST', /^\/api\/news\/build$/, async (q, res) => { const cfg = readJSON(path.join(userDir(q.u.id), 'wochenbericht.json'), { feeds: [] }); const r = await buildReport(q.u.id, cfg);
   writeJSON(path.join(userDir(q.u.id), 'reports', r.week + '.json'), r); send(res, 200, r); }, wb);
 on('GET', /^\/api\/news\/reports$/, (q, res) => { const d = path.join(userDir(q.u.id), 'reports'); send(res, 200, fs.existsSync(d) ? fs.readdirSync(d).filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).sort().reverse() : []); }, wb);
-on('GET', /^\/api\/news\/reports\/(\d{4}-W\d{2})$/, (q, res, m) => { const f = path.join(userDir(q.u.id), 'reports', m[1] + '.json'); fs.existsSync(f) ? send(res, 200, fs.readFileSync(f, 'utf8')) : err(res, 404, 'nicht gefunden'); }, wb);
+on('GET', /^\/api\/news\/reports\/(\d{4}-W\d{2})$/, (q, res, m) => { const f = path.join(userDir(q.u.id), 'reports', m[1] + '.json'); let r = readJSON(f, null); if (!r) return err(res, 404, 'nicht gefunden');
+  // Ältere Berichte (Meldungsliste) werden beim Ansehen zusammengefasst
+  if (!r.events) { const cfg = readJSON(path.join(userDir(q.u.id), 'wochenbericht.json'), {}); const { items = [], ...head } = r; r = { ...head, v: 2, ...bericht.summarize(items, { ...reportOpts(cfg), only: false }) }; }
+  send(res, 200, r); }, wb);
 
 
 
@@ -839,7 +895,7 @@ const STALE_TEXT = 'Der Server liefert keine aktuellen Daten. Läuft der Sammler
 function dockerProblem(c) {
   if (c.state === 'restarting') return 'startet ständig neu';
   if (c.state === 'dead') return 'defekt';
-  if (c.health === 'unhealthy') return 'unhealthy';
+  if (c.health === 'unhealthy' && c.state === 'running') return 'unhealthy'; // gestoppte behalten ihren letzten Stand
   if (c.oom) return 'Speicher ging aus';
   if (c.state === 'exited' && ![0, 130, 137, 143].includes(c.exit)) return `abgestürzt (Code ${c.exit})`; // 130/137/143: normal gestoppt
   const n = (c.restartTimes || []).filter(t => t > Date.now() - 864e5).length;
@@ -889,10 +945,22 @@ on('PUT', /^\/api\/geraete\/([0-9a-f:]{17})$/, async (q, res, m) => { const g = 
 on('DELETE', /^\/api\/geraete\/([0-9a-f:]{17})$/, (q, res, m) => { delete devs.list[m[1]]; writeJSON(DEV_FILE, devs); send(res, 200, { ok: true }); }, gr);
 
 // Aktuell gesperrte Anmeldungen (für die Protokoll-Kachel)
-on('GET', /^\/api\/protokoll\/sperren$/, (q, res) => { const now = Date.now();
-  send(res, 200, Object.entries(guard).filter(([, g]) => g.until > now).map(([k, g]) => { const i = k.indexOf(':'), kind = k.slice(0, i), v = k.slice(i + 1); let name = '', ip = '';
-    if (kind === 'jf') { if (v.startsWith('ip-')) ip = v.slice(3); else name = findUser(v)?.name || v; } else if (kind === 'ipacct') [name, ip] = v.split('|'); else if (kind === 'acct' || (kind === 'reset' && !net.isIP(v))) name = v; else ip = v;
-    return { kind, name, ip, until: g.until, level: g.level || 1 }; }).sort((a, b) => b.until - a.until)); }, logAdmin);
+function lockInfo(k) { const i = k.indexOf(':'), kind = k.slice(0, i), v = k.slice(i + 1); let name = '', ip = '';
+  if (kind === 'jf') { if (v.startsWith('ip-')) ip = v.slice(3); else name = findUser(v)?.name || v; }
+  else if (kind === 'ipacct') { const x = v.lastIndexOf('|'); name = v.slice(0, x); ip = v.slice(x + 1); } else if (kind === 'acct' || (kind === 'reset' && !net.isIP(v))) name = v; else ip = v;
+  return { id: sha(k).slice(0, 24), kind, name, ip }; }
+const activeLocks = () => { const now = Date.now(); return Object.entries(guard).filter(([, g]) => g.until > now); };
+on('GET', /^\/api\/protokoll\/sperren$/, (q, res) => send(res, 200, activeLocks().map(([k, g]) => ({ ...lockInfo(k), until: g.until, level: g.level || 1 })).sort((a, b) => b.until - a.until)), logAdmin);
+// Sperre von Hand aufheben (eine über ihre Kennung oder alle). Angefangene Fehlerzähler zum selben Namen
+// oder zur selben Adresse verschwinden mit, sonst wäre die Person nach einem Tippfehler gleich wieder gesperrt.
+on('POST', /^\/api\/protokoll\/sperren\/aufheben$/, async (q, res) => { const b = await json(q.req);
+  const hit = activeLocks().filter(([k]) => b.alle === true || sha(k).slice(0, 24) === b.id);
+  if (!hit.length) return err(res, 404, 'Diese Sperre gibt es nicht mehr');
+  const now = Date.now(), freed = hit.map(([k]) => lockInfo(k));
+  clearFails(...hit.map(([k]) => k), ...Object.entries(guard).filter(([k, g]) => { if (g.until > now) return false; const o = lockInfo(k), j = k.startsWith('jf:');
+    return freed.some(f => (f.kind === 'jf') === j && (f.name && o.name === f.name || f.ip && o.ip === f.ip)); }).map(([k]) => k));
+  for (const f of freed) log('sperre-aufgehoben', q.u.name, ipOf(q.req), [f.kind, f.name, f.ip].filter(Boolean).join(' · '));
+  send(res, 200, { ok: true, count: freed.length }); }, logAdmin);
 
 // ---------- Paketverfolgung ----------
 // Live-Status nur für DHL über die offizielle Schnittstelle (kostenloser Schlüssel). Andere Dienste: Stand von Hand + Link.

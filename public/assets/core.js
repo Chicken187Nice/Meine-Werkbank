@@ -47,9 +47,12 @@
     pin: '<path d="M12 17v5M8 3h8l-1 6 3 3H6l3-3z"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
     moon: '<path d="M20 14A8 8 0 1 1 10 4a7 7 0 0 0 10 10z"/>',
-    auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor"/>'
+    auto: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1.11-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1.11 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H9a1.7 1.7 0 0 0 1.03-1.56V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/>'
   };
-  const icon = (name, size = 18) =>
+  // Eigenes Symbol (Emoji) aus den Einstellungen geht vor
+  const icon = (name, size = 18) => { const e = D.emoji(name); return e ? `<span class="emo" style="font-size:${Math.round(size * .95)}px" aria-hidden="true">${e}</span>` : drawn(name, size); };
+  const drawn = (name, size) =>
     `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${I[name] || ''}</svg>`;
 
   // Bereiche mit eigener Farbe: [dunkles Design, helles Design]
@@ -72,7 +75,7 @@
     { id: 'countdown', t: 'Countdowns', g: 'Organisation', d: 'Urlaub, Geburtstage, Deadlines' },
     { id: 'fokus', t: 'Fokus-Timer', g: 'Organisation', d: 'Pomodoro mit Statistik' },
     { id: 'lesezeichen', t: 'Lesezeichen', g: 'Organisation', d: 'Deine wichtigsten Links' },
-    { id: 'wochenbericht', t: 'Wochenbericht', g: 'Organisation', d: 'News montags automatisch' },
+    { id: 'wochenbericht', t: 'Wochenbericht', g: 'Organisation', d: 'Die Ereignisse der Woche' },
     { id: 'berichtsheft', t: 'Berichtsheft', g: 'Ausbildung', d: 'Ausbildungsnachweis pro Woche' },
     { id: 'schule', t: 'Schule', g: 'Ausbildung', d: 'Stundenplan und Notenschnitt' },
     { id: 'lernen', t: 'C#-Trainer', g: 'Ausbildung', d: 'Karteikarten, Quiz, Java → C#' },
@@ -96,48 +99,26 @@
     { id: 'pakete', t: 'Pakete', g: 'Alltag', d: 'Sendungen verfolgen' },
     { id: 'jellyfin', t: 'Jellyfin', g: 'Freizeit', d: 'Filme und Serien vom Server' }
   ].map((a, i) => ({ ...a, nr: String(i + 1).padStart(2, '0') }));
-  const isLight = () => document.documentElement.dataset.phase === 'mittag';
-  const groupColor = g => (GROUPS[g] || { c: ['#9cc3d5', '#2a6f8f'] }).c[isLight() ? 1 : 0];
-  // Seitenfarbe: jede App übernimmt die Farbe ihres Bereichs als Akzent
-  function paintApp(id) {
-    const app = APPS.find(a => a.id === id); if (!app) return;
-    const set = () => { const c = groupColor(app.g), r = document.documentElement.style;
-      r.setProperty('--acc', c); r.setProperty('--acc2', c);
-      r.setProperty('--acc-ink', isLight() ? '#fff' : '#0b0d10');
-      r.setProperty('--glow', `color-mix(in srgb, ${c} 16%, transparent)`); };
-    set(); document.addEventListener('wb-theme', set); setInterval(set, 60000);
+  // ---------- Persönliche Einstellungen (Motor in design.js) ----------
+  const D = window.WBDesign({ APPS, GROUPS, toast: m => toast(m), save: (k, v) => Store.set(k, v), logout: () => logout(true) });
+  const { applyTheme, paintApp, groupColor, appColor, groupLabel, isLight, themeMode, themeIcon, cycleTheme, setPrefs, getPrefs, normalizePrefs, THEMES, PHASE_NAME, phaseFor } = D;
+  let settingsP = null;
+  const loadScript = src => new Promise((ok, no) => { const el = document.createElement('script'); el.src = src; el.onload = ok; el.onerror = () => { el.remove(); no(new Error(src)); }; document.head.appendChild(el); });
+  async function openSettings(tab) {
+    try { if (!window.WB.Settings) await (settingsP || (settingsP = loadScript('/assets/einstellungen.js'))); window.WB.Settings.open(tab); }
+    catch { settingsP = null; toast('Einstellungen konnten nicht geladen werden'); }
   }
-
-  // ---------- Tageszeit-Theme ----------
-  const phaseFor = (h) => h >= 5 && h < 10 ? 'morgen' : h >= 10 && h < 17 ? 'mittag' : h >= 17 && h < 22 ? 'abend' : 'nacht';
-  const PHASE_NAME = { morgen: 'Morgen', mittag: 'Mittag', abend: 'Abend', nacht: 'Nacht' };
-  function themeMode() { try { return localStorage.getItem('wb-theme') || 'auto'; } catch { return 'auto'; } }
-  function applyTheme() {
-    const m = themeMode();
-    const p = m === 'hell' ? 'mittag' : m === 'dunkel' ? 'nacht' : phaseFor(new Date().getHours());
-    document.documentElement.dataset.phase = p;
-    document.documentElement.dataset.mode = m;
-    return p;
-  }
-  function cycleTheme() {
-    const order = ['auto', 'hell', 'dunkel'];
-    const next = order[(order.indexOf(themeMode()) + 1) % 3];
-    try { localStorage.setItem('wb-theme', next); } catch {}
-    applyTheme(); document.dispatchEvent(new CustomEvent('wb-theme'));
-    toast({ auto: 'Design folgt der Tageszeit', hell: 'Immer hell', dunkel: 'Immer dunkel' }[next]);
-  }
-  applyTheme();
-  setInterval(applyTheme, 60000);
 
   // ---------- Server-API (Login-Session per Cookie, CSRF-Header) ----------
   async function api(url, opt = {}) {
     const o = { method: opt.method || 'GET', headers: { 'X-WB': '1' }, cache: 'no-store' };
     if (opt.body !== undefined) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opt.body); }
-    const r = await fetch(url, o);
-    if (r.status === 401) { location.href = '/login?next=' + encodeURIComponent(location.pathname); throw new Error('Nicht angemeldet'); }
+    let r; try { r = await fetch(url, o); }
+    catch { throw Object.assign(new Error('Server nicht erreichbar'), { hint: 'Prüfe deine Verbindung und versuch es gleich noch einmal. Es wurde vermutlich nichts gespeichert.' }); }
+    if (r.status === 401) { location.href = '/login?grund=abgemeldet&next=' + encodeURIComponent(location.pathname); throw new Error('Nicht angemeldet'); }
     const txt = await r.text(); let data; try { data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
     if (r.status === 403 && data && data.setup2fa && location.pathname !== '/apps/konto') location.href = '/apps/konto';
-    if (!r.ok) throw new Error((data && data.error) || ('Fehler ' + r.status));
+    if (!r.ok) throw Object.assign(new Error((data && data.error) || ('Fehler ' + r.status)), { status: r.status, hint: data && data.hint, retryMin: data && data.retryMin });
     return data;
   }
   let meP = null;
@@ -158,13 +139,19 @@
     },
     _send(key) {
       const body = this._p[key]; if (body === undefined) return Promise.resolve(); delete this._p[key];
-      return fetch('/api/data/' + key, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body, keepalive: body.length < 60000 })
-        .then(r => { if (!r.ok) toast('Speichern fehlgeschlagen'); }).catch(() => toast('Server nicht erreichbar, nicht gespeichert'));
+      // keepalive rettet das Speichern beim Seitenwechsel, der Browser erlaubt dafür aber nur 64 kB gleichzeitig:
+      // Antwort immer lesen (gibt das Kontingent frei) und bei Ablehnung normal senden
+      const send = keepalive => fetch('/api/data/' + key, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body, keepalive })
+        .then(r => r.text().then(() => { if (!r.ok) toast('Speichern fehlgeschlagen'); }));
+      const small = body.length < 60000;
+      return send(small).catch(e => { if (small) return send(false); throw e; }).catch(() => toast('Server nicht erreichbar, nicht gespeichert'));
     },
     flush() { return Promise.all(Object.keys(this._p).map(k => { clearTimeout(this._t[k]); return this._send(k); })); }
   };
   window.addEventListener('pagehide', () => Store.flush());
   const clone = v => v === undefined ? v : JSON.parse(JSON.stringify(v));
+
+  D.load();
 
   // ---------- kleine Helfer ----------
   const $ = (s, r = document) => r.querySelector(s);
@@ -184,8 +171,12 @@
   let toastEl;
   function toast(msg) {
     if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'toast'; document.body.appendChild(toastEl); }
+    // Offene Fenster liegen über allem: Der Hinweis muss hinein, sonst sieht man ihn nicht
+    const host = [...document.querySelectorAll('dialog[open]')].filter(d => d.matches(':modal')).pop() || document.body;
+    if (toastEl.parentNode !== host) { host.appendChild(toastEl); if (host !== document.body) host.addEventListener('close', () => document.body.appendChild(toastEl), { once: true }); }
     toastEl.textContent = msg; toastEl.classList.add('show');
-    clearTimeout(toastEl._t); toastEl._t = setTimeout(() => toastEl.classList.remove('show'), 2200);
+    // Längere Meldungen bleiben länger stehen
+    clearTimeout(toastEl._t); toastEl._t = setTimeout(() => toastEl.classList.remove('show'), Math.min(9000, Math.max(2600, String(msg).length * 70)));
   }
   function download(name, content, type = 'text/plain') {
     const a = document.createElement('a');
@@ -220,29 +211,34 @@
     el.className = 'top no-print';
     el.innerHTML = `<div class="in">
       <a class="crumb" href="/" title="Zur Werkbank (Esc)"><span class="home">${icon('home', 15)}</span>Werkbank <span>/</span>
-      ${app ? `<span class="idx">${esc(app.g)}</span> <span>/</span> <b>${esc(app.t)}</b>` : ''}</a>
+      ${app ? `<span class="idx">${esc(groupLabel(app.g))}</span> <span>/</span> <b>${esc(app.t)}</b>` : ''}</a>
       <span class="clock mono" id="wb-clock"></span>
       <button class="ghost icon" id="wb-theme" title="Design umschalten"></button>
+      <button class="ghost icon" id="wb-set" title="Einstellungen" aria-label="Einstellungen">${icon('gear', 17)}</button>
       <a class="btn ghost sm" href="/apps/konto" id="wb-user" title="Mein Konto">${icon('konto', 15)}<span></span></a>
       <button class="ghost icon" id="wb-out" title="Abmelden (überall in der Werkbank)">${icon('logout', 17)}</button>
     </div>`;
     document.body.prepend(el);
-    const lbl = document.querySelector('.page-head .label'); if (lbl && app) { lbl.innerHTML = `<span class="dot"></span>${esc(app.g)}`; lbl.classList.add('glabel'); }
+    const lbl = document.querySelector('.page-head .label'); if (lbl && app) { lbl.innerHTML = `<span class="dot"></span>${esc(groupLabel(app.g))}`; lbl.classList.add('glabel'); }
     if (app) { const ic = document.createElement('span'); ic.className = 'app-ico'; ic.innerHTML = icon(app.id, 22); const h1 = document.querySelector('.page-head h1'); if (h1) h1.prepend(ic); }
     const tb = el.querySelector('#wb-theme');
-    const setIcon = () => { const m = themeMode(); tb.innerHTML = icon(m === 'hell' ? 'sun' : m === 'dunkel' ? 'moon' : 'auto', 17); };
-    tb.onclick = cycleTheme; setIcon(); document.addEventListener('wb-theme', setIcon);
+    const setIcon = () => { tb.innerHTML = icon(themeIcon(), 17); };
+    tb.onclick = cycleTheme; setIcon(); document.addEventListener('wb-theme', setIcon); document.addEventListener('wb-prefs', setIcon);
+    el.querySelector('#wb-set').onclick = () => openSettings();
     me().then(u => { el.querySelector('#wb-user span').textContent = u.shown; }).catch(() => {});
+    // Eigene Namen und Symbole nachziehen, sobald die Einstellungen da sind oder sich ändern
+    document.addEventListener('wb-prefs', () => { if (!app) return; const q = s => document.querySelector(s); document.title = app.t + ' · Werkbank';
+      el.querySelector('.crumb b').textContent = app.t; el.querySelector('.crumb .idx').textContent = groupLabel(app.g); const ic = q('.page-head .app-ico'); if (ic) ic.innerHTML = icon(app.id, 22); });
     el.querySelector('#wb-out').onclick = logout;
     const c = el.querySelector('#wb-clock');
     const tick = () => { c.textContent = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); };
     tick(); setInterval(tick, 10000);
     document.addEventListener('keydown', e => {
-      if (e.key === 'Escape' && !document.querySelector('dialog[open]') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) location.href = '/';
+      if (e.key === 'Escape' && getPrefs().hotkeys && !document.querySelector('dialog[open]') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) location.href = '/';
     });
   }
 
-  async function logout() { await Store.flush(); try { await api('/api/auth/logout', { method: 'POST' }); } catch {} location.href = '/login?bye=1'; }
+  async function logout(forced) { if (forced !== true && getPrefs().confirmLogout && !window.confirm('Wirklich überall abmelden?')) return; await Store.flush(); D.forget(); try { await api('/api/auth/logout', { method: 'POST' }); } catch {} location.href = '/login?bye=1'; }
 
-  window.WB = { editForm, api, me, logout, APPS, GROUPS, groupColor, isLight, icon, Store, $, $$, esc, uid, eur, num, today, ymd, parseYmd, fmtDate, daysBetween, pf, debounce, toast, download, header, applyTheme, cycleTheme, themeMode, phaseFor, PHASE_NAME };
+  window.WB = { editForm, api, me, logout, APPS, GROUPS, groupColor, isLight, icon, themeIcon, THEMES, normalizePrefs, setPrefs, openSettings, loadScript, getPrefs, appColor, groupLabel, design: D, Store, $, $$, esc, uid, eur, num, today, ymd, parseYmd, fmtDate, daysBetween, pf, debounce, toast, download, header, applyTheme, cycleTheme, themeMode, phaseFor, PHASE_NAME };
 })();

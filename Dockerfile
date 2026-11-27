@@ -1,7 +1,7 @@
 FROM node:22-alpine
 RUN apk add --no-cache openssl tzdata
 WORKDIR /app
-COPY server.js jellyfin.js ./
+COPY server.js jellyfin.js bericht.js ./
 COPY public ./public
 ENV PORT=8080 HTTPS_PORT=8443 DATA_DIR=/data TZ=Europe/Berlin NODE_ENV=production
 RUN mkdir -p /data && chown -R node:node /data /app

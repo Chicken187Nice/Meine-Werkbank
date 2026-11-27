@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Jellyfin</title>
 <style>
-  main.wrap { max-width: 1480px; }
+  main.wrap { max-width: var(--wb-wa, 1480px); }
   .bar1 { display:flex; gap: 10px; flex-wrap: wrap; align-items:center; margin-bottom: 20px; }
   .bar1 .libs { display:flex; gap: 6px; flex-wrap: wrap; } .bar1 .libs a.on { border-color: var(--acc); color: var(--acc); }
   .bar1 form { margin-left: auto; width: min(320px, 100%); }
@@ -32,8 +32,15 @@
   .ep { display:grid; grid-template-columns: 200px minmax(0,1fr) auto; gap: 14px; align-items:center; padding: 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); }
   .ep .pic { aspect-ratio: 16/9; } .ep p { color: var(--mute); font-size: 12.5px; display:-webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow:hidden; }
   .connect { max-width: 440px; margin: 30px auto; }
-  dialog.player { width: 100vw; height: 100vh; height: 100dvh; max-width: 100vw; max-height: 100dvh; padding: 0; border: 0; border-radius: 0; background: #000; color: #fff; }
-  .player[open] { display:grid; grid-template-rows: auto minmax(0,1fr) auto; }
+  dialog.player { width: calc(100vw / var(--wb-z, 1)); height: calc(100vh / var(--wb-z, 1)); height: calc(100dvh / var(--wb-z, 1)); max-width: calc(100vw / var(--wb-z, 1)); max-height: calc(100dvh / var(--wb-z, 1)); padding: 0; border: 0; border-radius: 0; background: #000; color: #fff; }
+  .player[open] { display:grid; grid-template-rows: minmax(0,1fr); }
+  /* Vollbild: der Browser erlaubt es nicht für <dialog> selbst, deshalb füllt dieser Kasten den Bildschirm */
+  #pWrap { display:grid; grid-template-rows: auto minmax(0,1fr) auto; min-height: 0; position: relative; background: #000; color: #fff; }
+  #pWrap:fullscreen { grid-template-rows: minmax(0,1fr); width: 100%; height: 100%; }
+  #pWrap:fullscreen :is(header, footer) { position: absolute; left: 0; right: 0; z-index: 2; transition: opacity .25s; }
+  #pWrap:fullscreen header { top: 0; background: linear-gradient(rgba(0,0,0,.8), transparent); }
+  #pWrap:fullscreen footer { bottom: 0; background: linear-gradient(transparent, rgba(0,0,0,.85)); }
+  #pWrap.idle:fullscreen { cursor: none; } #pWrap.idle:fullscreen :is(header, footer) { opacity: 0; pointer-events: none; }
   .player header, .player footer { display:flex; gap: 10px; align-items:center; padding: 10px 14px; flex-wrap: wrap; }
   .player header b { overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
   .player video { position:absolute; inset:0; width: 100%; height: 100%; background:#000; }
@@ -52,15 +59,15 @@
   <nav class="bar1 hide" id="nav"><div class="libs" id="libs"></div><form id="sf" role="search"><input id="sq" type="search" placeholder="Suchen …" maxlength="100"></form></nav>
   <div id="view"><div class="faint">Lädt …</div></div>
 </main>
-<dialog class="player" id="player">
+<dialog class="player" id="player"><div id="pWrap">
   <header><button id="pClose" aria-label="Schließen">✕</button><b class="grow" id="pTitle"></b>
     <select id="pAudio" class="hide" aria-label="Tonspur"></select><select id="pSub" class="hide" aria-label="Untertitel"></select>
     <select id="pQual" aria-label="Qualität"><option value="max">Original</option><option value="hoch">Hoch · 10 Mbit</option><option value="mittel">Mittel · 4 Mbit</option><option value="niedrig">Niedrig · 1,5 Mbit</option></select></header>
   <div id="pBox" style="min-height:0;display:grid;position:relative"><video id="vid" playsinline></video><div class="msg" id="pMsg"></div></div>
   <footer><button id="pBack" title="10 Sekunden zurück">−10 s</button><button id="pPlay" class="primary">Pause</button><button id="pFwd" title="30 Sekunden vor">+30 s</button>
     <input type="range" id="pSeek" min="0" step="1" value="0" aria-label="Position"><span class="time" id="pTime"></span>
-    <input type="range" id="pVol" min="0" max="1" step="0.05" value="1" aria-label="Lautstärke" style="flex:0 0 90px"><button id="pNext" class="hide">Nächste Folge ▶</button><button id="pFull">Vollbild</button></footer>
-</dialog>
+    <input type="range" id="pVol" min="0" max="1" step="0.05" value="1" aria-label="Lautstärke" style="flex:0 0 90px"><button id="pNext" class="hide">Nächste Folge ▶</button><button id="pFull" title="Vollbild (Taste F oder Doppelklick)">Vollbild</button></footer>
+</div></dialog>
 <script>
 WB.header('jellyfin');
 const { $, $$, esc, api, toast } = WB;
@@ -200,10 +207,25 @@ $('#pAudio').onchange = () => { if (P) play(P.id, position(), { audio: +$('#pAud
 $('#pSub').onchange = () => { $$('track', vid).forEach(t => t.remove()); const i = $('#pSub').value; if (!P || i === '') return;
   const t = document.createElement('track'); t.kind = 'subtitles'; t.label = 'Untertitel'; t.src = `/api/jf/sub/${P.r.ticket}/${i}`; t.default = true; vid.appendChild(t); t.track.mode = 'showing'; };
 $('#pNext').onclick = () => { if (P?.next) play(P.next.id, P.next.pos || 0); };
-$('#pFull').onclick = () => document.fullscreenElement ? document.exitFullscreen() : ($('#player').requestFullscreen?.() || vid.webkitEnterFullscreen?.());
+const wrap = $('#pWrap');
+// iPhones kennen nur das Vollbild des Videos selbst
+const videoFull = () => vid.webkitEnterFullscreen ? vid.webkitEnterFullscreen() : toast('Dieser Browser erlaubt hier kein Vollbild');
+function fullscreen() {
+  if (document.fullscreenElement) return document.exitFullscreen();
+  if (!wrap.requestFullscreen) return videoFull();
+  wrap.requestFullscreen().then(() => screen.orientation?.lock?.('landscape').catch(() => {})).catch(videoFull);
+}
+// Im Vollbild verschwinden die Bedienleisten, solange nichts passiert
+let idleT = 0;
+function awake() { wrap.classList.remove('idle'); clearTimeout(idleT); idleT = setTimeout(() => { if (document.fullscreenElement && !vid.paused && !wrap.querySelector('select:focus')) wrap.classList.add('idle'); }, 3000); }
+for (const ev of ['pointermove', 'pointerdown', 'keydown']) wrap.addEventListener(ev, awake);
+vid.addEventListener('pause', awake);
+document.addEventListener('fullscreenchange', () => { $('#pFull').textContent = document.fullscreenElement ? 'Vollbild beenden' : 'Vollbild'; awake(); });
+$('#pFull').onclick = fullscreen; vid.ondblclick = fullscreen;
 $('#pClose').onclick = () => $('#player').close();
 $('#player').addEventListener('close', () => { if (P) report('stop'); P = null; play.n = (play.n || 0) + 1; vid.pause(); vid.removeAttribute('src'); vid.load(); if (document.fullscreenElement) document.exitFullscreen(); HOME = null; route(); });
-$('#player').addEventListener('keydown', e => { if (/SELECT|INPUT/.test(e.target.tagName)) return;
+document.addEventListener('keydown', e => { if (!$('#player').open || document.querySelector('.wb-set[open]') || e.ctrlKey || e.metaKey || e.altKey || /SELECT|INPUT/.test(e.target.tagName)) return;
+  if (e.key === 'f' || e.key === 'F') fullscreen();
   if (e.key === ' ' && e.target.tagName !== 'BUTTON') { e.preventDefault(); $('#pPlay').click(); } if (e.key === 'ArrowLeft') seek(position() - 10); if (e.key === 'ArrowRight') seek(position() + 30); });
 window.addEventListener('pagehide', () => { if (P) fetch('/api/jf/progress/' + P.r.ticket, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body: JSON.stringify({ event: 'stop', pos: position() }) }).catch(() => {}); });
 

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Bewerbungs-Kit</title>
 <style>
   .bw { display: grid; grid-template-columns: minmax(380px, 470px) minmax(0,1fr); gap: 14px; align-items: start; }
@@ -47,7 +47,7 @@
   .dr select { padding-left: 6px; padding-right: 2px; }
   @media (max-width: 480px) { .dr { grid-template-columns: 24px minmax(0,1.35fr) minmax(0,1fr) 56px; gap: 4px; } }
   /* Vorschau bleibt beim Ausfüllen im Blick */
-  @media (min-width: 981px) { .view { position: sticky; top: 70px; max-height: calc(100vh - 86px); overflow: auto; } }
+  @media (min-width: 981px) { .view { position: sticky; top: 70px; max-height: calc(100vh / var(--wb-z, 1) - 86px); overflow: auto; } }
   @page { margin: 14mm 15mm; }
   @media print {
     body::before, body::after, .page-head, .ed, .toast, #t-iv { display: none !important; }

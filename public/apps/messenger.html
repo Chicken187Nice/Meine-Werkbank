@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/passwort-hilfe.js"></script>
 <title>Messenger</title>
 <style>
-  .chat { display:grid; grid-template-columns: 300px minmax(0,1fr); height: calc(100vh - 290px); min-height: 500px; border:1px solid var(--line); border-radius: var(--r); overflow:hidden; background: var(--bg2); }
+  .chat { display:grid; grid-template-columns: 300px minmax(0,1fr); height: calc(100vh / var(--wb-z, 1) - 290px); min-height: 500px; border:1px solid var(--line); border-radius: var(--r); overflow:hidden; background: var(--bg2); }
   .contacts { border-right:1px solid var(--line); display:flex; flex-direction:column; min-height: 0; }
   .contacts .find { padding: 10px; border-bottom: 1px solid var(--line); } #cts { overflow:auto; flex: 1; }
   .ct { display:flex; gap: 12px; align-items:center; padding: 12px 14px; cursor:pointer; border:0; border-bottom: 1px solid var(--line); width: 100%; background: transparent; border-radius: 0; text-align: left; justify-content: flex-start; font-weight: 400; }
@@ -51,8 +51,8 @@
   .lock { max-width: 460px; margin: 40px auto; text-align:center; }
   .lock .ico { width: 64px; height: 64px; margin: 0 auto 16px; border-radius: 18px; display:grid; place-items:center; border: 1px solid var(--acc); color: var(--acc); }
   .fp { font: 13px/1.8 var(--f-mono); letter-spacing: .06em; word-spacing: .4em; }
-  #zoomDlg { width: auto; max-width: 96vw; padding: 10px; } #zoomDlg img { display:block; max-width: calc(96vw - 24px); max-height: 82vh; }
-  @media (max-width: 760px) { .chat { grid-template-columns: minmax(0,1fr); height: calc(100dvh - 110px); } .chat .pane { display:none; } .chat.open .pane { display:flex; } .chat.open .contacts { display:none; } .contacts { border-right: 0; } .back { display:inline-flex; }
+  #zoomDlg { width: auto; max-width: calc(96vw / var(--wb-z, 1)); padding: 10px; } #zoomDlg img { display:block; max-width: calc(96vw / var(--wb-z, 1) - 24px); max-height: calc(82vh / var(--wb-z, 1)); }
+  @media (max-width: 760px) { .chat { grid-template-columns: minmax(0,1fr); height: calc(100dvh / var(--wb-z, 1) - 110px); } .chat .pane { display:none; } .chat.open .pane { display:flex; } .chat.open .contacts { display:none; } .contacts { border-right: 0; } .back { display:inline-flex; }
     .chat.open { position: fixed; inset: 0; height: auto; z-index: 40; border: 0; border-radius: 0; } .pane-h { gap: 6px; padding: 8px; flex-wrap: nowrap; } .pane-h .av { display:none; } .pane-h .long { display:none; } .pane-h select { max-width: 104px; }
     .mw { max-width: 90%; } .page-head p { display:none; } .composer { gap: 2px; padding: 8px 6px; } .composer .icon { width: 36px; } }
 </style>
@@ -111,9 +111,13 @@ async function createVault(pass) {
   const ct = await S.encrypt({ name: 'AES-GCM', iv }, k, te.encode(priv));
   await api('/api/msg/keys', { method: 'PUT', body: { pub, blob: { salt: b64(salt), iv: b64(iv), ct: b64(ct), iter: ITER } } });
 }
+// Alle erlaubten Schreibweisen durchprobieren (Einmalpasswort mit oder ohne Bindestriche)
+async function unlockBlob(blob, pass) {
+  let fail; for (const v of WBPass.variants(pass)) try { return await S.decrypt({ name: 'AES-GCM', iv: ub64(blob.iv) }, await kek(v, ub64(blob.salt), blob.iter), ub64(blob.ct)); } catch (e) { fail = e; }
+  throw fail;
+}
 async function openVault(rec, pass) {
-  const k = await kek(pass, ub64(rec.blob.salt), rec.blob.iter);
-  const priv = JSON.parse(td.decode(await S.decrypt({ name: 'AES-GCM', iv: ub64(rec.blob.iv) }, k, ub64(rec.blob.ct))));
+  const priv = JSON.parse(td.decode(await unlockBlob(rec.blob, pass)));
   return { pub: rec.pub,
     dh: await S.importKey('pkcs8', ub64(priv.ecdh), { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']),
     sg: await S.importKey('pkcs8', ub64(priv.ecdsa), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign']) };
@@ -196,9 +200,9 @@ function lockView(rec) {
     <p class="faint" style="font-size:12px">Setzt ein Admin dein Passwort zurück, wird der Tresor neu erzeugt. Alte Nachrichten sind dann nicht mehr lesbar. So soll es sein.</p></form>`;
   $('#pw').focus();
   $('#lf').onsubmit = async e => { e.preventDefault(); const p = $('#pw').value; $('#lb').disabled = true; $('#lb').textContent = 'Rechne …';
-    try { if (!rec) { await api('/api/auth/verify', { method: 'POST', body: { pass: p } }); await createVault(p); rec = await api('/api/msg/keys'); }
+    try { if (!rec) { await api('/api/auth/verify', { method: 'POST', body: { pass: p } }); await createVault(WBPass.canon(p)); rec = await api('/api/msg/keys'); }
       keys = await openVault(rec, p); myFp = await fingerprint(keys.pub); start(); }
-    catch (err) { toast(err.message && err.message !== 'OperationError' && !/decrypt/i.test(err.message) ? err.message : 'Passwort falsch'); $('#lb').disabled = false; $('#lb').textContent = rec ? 'Entsperren' : 'Schlüssel erzeugen'; } };
+    catch (err) { toast(err.message && err.message !== 'OperationError' && !/decrypt/i.test(err.message) ? [err.message, err.hint].filter(Boolean).join('. ') : 'Passwort falsch. Gemeint ist dein Login-Passwort.'); $('#lb').disabled = false; $('#lb').textContent = rec ? 'Entsperren' : 'Schlüssel erzeugen'; } };
 }
 async function start() {
   $('#state').textContent = 'entsperrt · E2E'; $('#state').classList.add('on'); $('#lockBtn').hidden = $('#setBtn').hidden = false;

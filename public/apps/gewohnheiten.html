@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Gewohnheiten</title>
 <style>
   .habit { display:grid; grid-template-columns: 1fr auto; gap:14px; padding:16px; border:1px solid var(--line); border-radius:var(--r-sm); background:var(--bg); }
@@ -26,7 +26,7 @@
 <main class="wrap">
   <div class="page-head">
     <div><div class="label">04 · Alltag</div><h1>Gewohnheiten</h1><p>Klein anfangen, jeden Tag abhaken. Jeder Haken bringt Punkte, Serien geben einen Bonus und alle paar Level schaltest du eine eigene Belohnung frei.</p></div>
-    <form class="row" id="addF" style="flex-wrap:nowrap"><input id="addIn" placeholder="Neue Gewohnheit, z. B. 20 Min lesen" style="flex:1;min-width:0;width:min(260px,60vw)"><button class="primary">Hinzufügen</button></form>
+    <form class="row" id="addF" style="flex-wrap:nowrap"><input id="addIn" placeholder="Neue Gewohnheit, z. B. 20 Min lesen" style="flex:1;min-width:0;width:min(260px,calc(60vw / var(--wb-z, 1)))"><button class="primary">Hinzufügen</button></form>
   </div>
   <div class="side">
     <div class="stack">

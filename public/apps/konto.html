@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/passwort-hilfe.js"></script><script src="/assets/cockpit.js"></script>
 <title>Mein Konto</title>
 <style>
   .secret { font: 600 18px/1.6 var(--f-mono); letter-spacing: .12em; word-break: break-all; }
@@ -20,14 +20,17 @@
     <form class="panel stack" id="pwF"><div class="label">Passwort ändern</div>
       <p class="faint" style="font-size:12px">Mindestens 10 Zeichen. Unter 16 Zeichen drei Zeichenarten (Groß, klein, Ziffer, Sonderzeichen). Tipp: Eine Passphrase aus 4–5 Wörtern ist stark und gut zu merken.</p>
       <label class="field"><span>Aktuelles Passwort</span><input type="password" id="old" autocomplete="current-password" required></label>
+      <p class="faint" style="font-size:12px" id="oldHint">Das Passwort, mit dem du dich zuletzt angemeldet hast.</p>
       <label class="field"><span>Neues Passwort (mind. 10 Zeichen)</span><input type="password" id="new1" autocomplete="new-password" required minlength="10"></label>
       <label class="field"><span>Wiederholen</span><input type="password" id="new2" autocomplete="new-password" required></label>
+      <div class="notice hide" role="alert"></div>
       <button class="primary">Ändern</button>
       <p class="faint" style="font-size:12px">Danach werden alle anderen Sitzungen abgemeldet. Dein Messenger-Tresor wird automatisch mit dem neuen Passwort neu verschlüsselt.</p></form>
     </div>
     <div class="stack">
       <div class="panel stack" id="tfa"></div>
       <div class="panel"><div class="panel-h"><span class="label">Angemeldete Geräte</span><button class="sm danger" id="all">Überall abmelden</button></div><div class="list" id="sess"></div></div>
+      <div class="panel stack"><div class="label">Aussehen und Verhalten</div><p class="mute" style="font-size:13px">Designs, Farben, Schrift, Startseite, Cockpit und Bedienung. Gilt nur für dein Konto. Du erreichst das auch überall über das Zahnrad oben rechts.</p><div><button class="primary" id="openSet">Einstellungen öffnen</button></div></div>
       <div class="panel stack hide" id="ckBox"><div class="label">Cockpit auf der Startseite</div><p class="mute" style="font-size:13px">Welche Anzeigen links und rechts neben deinen Kacheln stehen. Änderungen werden sofort gespeichert.</p><div id="ckSet"></div></div>
       <div class="panel stack" id="dataBox"><div class="label">Meine Daten</div><p class="mute" style="font-size:13px">Sicherung aller deiner Einträge als JSON-Datei (ohne Messenger, der ist verschlüsselt).</p>
         <div class="row"><a class="btn" href="/api/backup">Sicherung herunterladen</a><label class="btn" style="cursor:pointer">Sicherung einspielen<input type="file" id="imp" accept="application/json" hidden></label></div></div>
@@ -36,6 +39,8 @@
 </main>
 <script>
 WB.header('konto');
+WB.$('#openSet').onclick = () => WB.openSettings();
+document.addEventListener('wb-cockpit', e => { if (!WB.$('#ckBox').classList.contains('hide')) WB.Cockpit.settings(WB.$('#ckSet'), e.detail, c => WB.Store.set('cockpit', c)); });
 const { $, esc, api, toast } = WB;
 let me;
 const S = window.crypto && crypto.subtle, te = new TextEncoder();
@@ -45,24 +50,40 @@ async function rewrap(oldP, newP) {
   if (!me.apps.includes('messenger')) return undefined; let rec; try { rec = await api('/api/msg/keys'); } catch { return undefined; }
   if (!rec) return undefined;
   if (!S) throw new Error('Du hast einen Messenger-Tresor. Ändere das Passwort bitte über https://…:8443 oder http://localhost:8080, sonst geht der Tresor verloren.');
-  const priv = await S.decrypt({ name: 'AES-GCM', iv: ub64(rec.blob.iv) }, await kek(oldP, ub64(rec.blob.salt), rec.blob.iter), ub64(rec.blob.ct));
+  let priv, fail; for (const v of WBPass.variants(oldP)) try { priv = await S.decrypt({ name: 'AES-GCM', iv: ub64(rec.blob.iv) }, await kek(v, ub64(rec.blob.salt), rec.blob.iter), ub64(rec.blob.ct)); break; } catch (e) { fail = e; }
+  if (!priv) throw fail;
   const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  return { salt: b64(salt), iv: b64(iv), iter: 600000, ct: b64(await S.encrypt({ name: 'AES-GCM', iv }, await kek(newP, salt, 600000), priv)) };
+  return { salt: b64(salt), iv: b64(iv), iter: 600000, ct: b64(await S.encrypt({ name: 'AES-GCM', iv }, await kek(WBPass.canon(newP), salt, 600000), priv)) };
 }
-$('#pwF').onsubmit = async e => { e.preventDefault(); const o = $('#old').value, n = $('#new1').value;
-  if (n !== $('#new2').value) return toast('Neue Passwörter stimmen nicht überein');
-  try { let vault; try { vault = await rewrap(o, n); } catch (err) { if (/Tresor/.test(err.message)) throw err; throw new Error('Aktuelles Passwort falsch'); }
-    await api('/api/auth/password', { method: 'POST', body: { old: o, pass: n, vault } }); e.target.reset(); toast('Passwort geändert');
-    if (me.mustChange) setTimeout(() => me.setup2fa ? location.reload() : location.href = '/', 700); }
-  catch (err) { toast(err.message); } };
+// Rückmeldungen bleiben beim Formular stehen, bis es erneut abgeschickt wird
+function note(form, title, kind = '', hint = '', retryMin) {
+  let n = form.querySelector('.notice') || (form.nextElementSibling?.classList.contains('notice') ? form.nextElementSibling : null);
+  if (!n) { if (!title) return; n = document.createElement('div'); n.setAttribute('role', 'alert'); form.after(n); }
+  n.className = 'notice ' + kind + (title ? '' : ' hide'); WBPass.fill(n, title, hint, retryMin); if (title) n.scrollIntoView({ block: 'nearest' });
+}
+const fail = (form, err) => typeof err === 'string' ? note(form, err) : note(form, err.message, '', err.hint, err.retryMin);
+// Knopf sperren und beschriften, solange der Server arbeitet
+async function busy(form, text, fn) { const b = form.querySelector('button.primary, button.danger, button:not([type=button])'); const old = b.textContent; b.disabled = true; b.textContent = text; note(form, '');
+  try { return await fn(); } catch (err) { fail(form, err); } finally { b.disabled = false; b.textContent = old; } }
+WBPass.attach($('#old'));
+WBPass.attach($('#new1'), { neu: true, repeat: $('#new2'), name: () => me?.name });
+$('#pwF').onsubmit = e => { e.preventDefault(); const form = e.target, o = $('#old').value, n = $('#new1').value;
+  if (n !== $('#new2').value) return note(form, 'Die neuen Passwörter stimmen nicht überein.', '', 'Gib bei „Neues Passwort“ und „Wiederholen“ genau dasselbe ein.');
+  busy(form, 'Speichere …', async () => {
+    let vault; try { vault = await rewrap(o, n); } catch (err) { if (/Tresor/.test(err.message)) throw err; throw Object.assign(new Error('Aktuelles Passwort falsch'), { hint: 'Damit konnte dein Messenger-Tresor nicht geöffnet werden. Es wurde nichts geändert.' }); }
+    await api('/api/auth/password', { method: 'POST', body: { old: o, pass: n, vault } }); form.reset();
+    const done = 'Ab jetzt gilt nur noch das neue Passwort. Deine anderen Geräte wurden abgemeldet. Fragt der Browser, ob er es speichern soll, sag Ja.';
+    if (!me.mustChange) { note(form, 'Passwort geändert.', 'ok', done); sess(); return; }
+    if (me.setup2fa) { sessionStorage.setItem('wb-konto-pw', '1'); setTimeout(() => location.reload(), 700); note(form, 'Passwort geändert.', 'ok', 'Weiter mit Zwei-Faktor …'); }
+    else { note(form, 'Passwort geändert.', 'ok', done + ' Du wirst gleich zur Startseite geleitet …'); setTimeout(() => location.href = '/', 3000); } }); };
 function showCodes(codes) {
   $('#tfa').innerHTML = `<div class="label">Wiederherstellungscodes</div><p style="font-size:14px"><b>Jetzt sicher aufbewahren</b> (ausdrucken oder im Passwortmanager). Jeder Code funktioniert genau einmal, statt des Handy-Codes beim Login oder bei „Passwort vergessen“. Sie werden nur dieses eine Mal angezeigt.</p>
     <div class="sunk secret" style="display:grid;grid-template-columns:repeat(2,1fr);gap:4px 18px;font-size:16px">${codes.map(c => `<span>${esc(c)}</span>`).join('')}</div>
     <div class="row"><button type="button" id="cpC">Kopieren</button><button type="button" id="dlC">Als Datei speichern</button><span class="grow"></span><button class="primary" id="okC">Habe ich gesichert</button></div>`;
   const txt = 'Werkbank – Wiederherstellungscodes für ' + me.name + '\n' + new Date().toLocaleString('de-DE') + '\n\n' + codes.join('\n');
-  $('#cpC').onclick = () => navigator.clipboard.writeText(txt).then(() => toast('Kopiert'));
+  $('#cpC').onclick = () => navigator.clipboard.writeText(txt).then(() => toast('Wiederherstellungscodes kopiert. Füge sie an einem sicheren Ort ein.'), () => toast('Kopieren ging nicht. Nimm „Als Datei speichern“.'));
   $('#dlC').onclick = () => WB.download('werkbank-wiederherstellungscodes.txt', txt);
-  $('#okC').onclick = () => { me.recoveryLeft = codes.length; if (me.setup2fa) location.href = '/'; else tfa(); };
+  $('#okC').onclick = () => { me.recoveryLeft = codes.length; if (me.setup2fa) toast('Fertig, deine Seiten sind freigeschaltet.'); if (me.setup2fa) location.href = '/'; else tfa(); };
 }
 async function tfa() {
   if (me.totp) {
@@ -71,19 +92,20 @@ async function tfa() {
       <form class="row" id="recF" style="flex-wrap:nowrap"><input id="recC" placeholder="Code aus der App" inputmode="numeric"><button>Neue Wiederherstellungscodes</button></form>
       ${me.require2fa ? `<p class="mute" style="font-size:13px">Für dein Konto Pflicht, deshalb nicht abschaltbar. Neues Handy? ${me.owner ? 'Setz deine 2FA in der Verwaltung zurück' : 'Ein Admin setzt deine 2FA zurück'}, danach richtest du sie neu ein.</p>`
         : `<details><summary class="mute" style="cursor:pointer;font-size:13px">2FA ausschalten</summary><form class="stack" id="offF" style="margin-top:8px"><input id="offP" type="password" placeholder="Passwort" autocomplete="current-password"><input id="offC" placeholder="Code oder Wiederherstellungscode"><button class="danger">Deaktivieren</button></form></details>`}`;
-    $('#recF').onsubmit = async e => { e.preventDefault(); try { const r = await api('/api/auth/recovery', { method: 'POST', body: { code: $('#recC').value } }); showCodes(r.recovery); } catch (err) { toast(err.message); } };
-    if ($('#offF')) $('#offF').onsubmit = async e => { e.preventDefault(); if (!confirm('2FA wirklich ausschalten? Dann kannst du dein Passwort nicht mehr selbst zurücksetzen.')) return;
-      try { await api('/api/auth/totp/disable', { method: 'POST', body: { pass: $('#offP').value, code: $('#offC').value } }); me.totp = false; toast('2FA deaktiviert'); tfa(); } catch (err) { toast(err.message); } };
+    $('#recF').onsubmit = e => { e.preventDefault(); busy(e.target, 'Prüfe …', async () => { const r = await api('/api/auth/recovery', { method: 'POST', body: { code: $('#recC').value } }); showCodes(r.recovery); toast('Neue Codes erzeugt. Die alten gelten nicht mehr.'); }); };
+    if ($('#offF')) $('#offF').onsubmit = e => { e.preventDefault(); const form = e.target; if (!confirm('2FA wirklich ausschalten? Dann kannst du dein Passwort nicht mehr selbst zurücksetzen.')) return note(form, 'Abgebrochen.', 'info', '2FA ist weiterhin aktiv.');
+      busy(form, 'Prüfe …', async () => { await api('/api/auth/totp/disable', { method: 'POST', body: { pass: $('#offP').value, code: $('#offC').value } }); me.totp = false; toast('2FA ist ausgeschaltet. Beim Anmelden reicht jetzt das Passwort.'); tfa(); }); };
     return;
   }
   $('#tfa').innerHTML = `<div class="label">Zwei-Faktor-Anmeldung</div><p class="mute" style="font-size:14px">Dringend empfohlen, vor allem wenn die Werkbank aus dem Internet erreichbar ist: Ohne dein Handy kommt niemand rein, selbst mit Passwort. Und du kannst dein Passwort dann selbst zurücksetzen. Funktioniert mit Google Authenticator, Microsoft Authenticator, Aegis, 2FAS …</p>
     <form class="row" id="onF" style="flex-wrap:nowrap"><input id="onP" type="password" placeholder="Dein Passwort zur Bestätigung" autocomplete="current-password"><button class="primary">Einrichten</button></form><div id="tfaSet"></div>`;
-  $('#onF').onsubmit = async e => { e.preventDefault(); let r; try { r = await api('/api/auth/totp/begin', { method: 'POST', body: { pass: $('#onP').value } }); } catch (err) { return toast(err.message); }
-    $('#tfaSet').innerHTML = `<div class="sunk stack" style="margin-top:10px"><span class="mute" style="font-size:13px">In der App „Konto hinzufügen“ → „Schlüssel manuell eingeben“, Typ: zeitbasiert, Name: Werkbank</span>
+  $('#onF').onsubmit = e => { e.preventDefault(); busy(e.target, 'Prüfe …', async () => { const r = await api('/api/auth/totp/begin', { method: 'POST', body: { pass: $('#onP').value } });
+    $('#tfaSet').innerHTML = `<div class="sunk stack" style="margin-top:10px"><span class="mute" style="font-size:13px"><b>Passwort bestätigt. So geht es weiter:</b><br>1. Authenticator-App öffnen, „Konto hinzufügen“ → „Schlüssel manuell eingeben“.<br>2. Name „Werkbank“, Typ zeitbasiert, Schlüssel von hier:</span>
       <div class="secret">${r.secret.match(/.{1,4}/g).join(' ')}</div><button class="sm" type="button" id="cp">Schlüssel kopieren</button>
+      <span class="mute" style="font-size:13px">3. Den 6-stelligen Code eingeben, den die App jetzt anzeigt. Danach bekommst du Wiederherstellungscodes.</span>
       <form class="row" id="enF" style="flex-wrap:nowrap"><input id="enC" placeholder="6-stelliger Code aus der App" inputmode="numeric"><button class="primary">Aktivieren</button></form></div>`;
-    $('#cp').onclick = () => navigator.clipboard.writeText(r.secret).then(() => toast('Kopiert'));
-    $('#enF').onsubmit = async e => { e.preventDefault(); try { const x = await api('/api/auth/totp/enable', { method: 'POST', body: { code: $('#enC').value } }); me.totp = true; toast('2FA ist aktiv'); showCodes(x.recovery); } catch (err) { toast(err.message); } }; };
+    $('#cp').onclick = () => navigator.clipboard.writeText(r.secret).then(() => toast('Schlüssel kopiert'), () => toast('Kopieren ging nicht. Tipp den Schlüssel ab.'));
+    $('#enF').onsubmit = e => { e.preventDefault(); busy(e.target, 'Prüfe …', async () => { const x = await api('/api/auth/totp/enable', { method: 'POST', body: { code: $('#enC').value } }); me.totp = true; toast('2FA ist aktiv. Sichere jetzt die Wiederherstellungscodes.'); showCodes(x.recovery); steps(); }); }; }); };
 }
 async function sess() { const l = await api('/api/auth/sessions');
   $('#sess').innerHTML = l.sort((a,b) => b.last - a.last).map(s => `<div class="it"><div class="grow"><div style="font-size:14px">${esc(ua(s.ua))} ${s.current ? '<span class="chip on">dieses Gerät</span>' : ''}</div><div class="faint mono" style="font-size:11px">${esc(s.ip)} · aktiv ${new Date(s.last).toLocaleString('de-DE')}</div></div>${s.current ? '' : `<button class="sm ghost danger" data-s="${s.id}">Abmelden</button>`}</div>`).join(''); }
@@ -91,16 +113,28 @@ const ua = s => (/(Edg|Chrome|Firefox|Safari)/.exec(s) || ['Browser'])[0].replac
 document.addEventListener('click', async e => { const b = e.target.closest('[data-s]'); if (b) { await api('/api/auth/sessions/' + b.dataset.s, { method: 'DELETE' }); sess(); } });
 $('#all').onclick = async () => { if (confirm('Auf allen Geräten abmelden, auch hier?')) { await api('/api/auth/logout-all', { method: 'POST' }); location.href = '/login?bye=1'; } };
 $('#imp').onchange = async e => { const f = e.target.files[0]; if (!f) return; try { const r = await api('/api/backup', { method: 'POST', body: JSON.parse(await f.text()) }); toast(r.restored + ' Bereiche wiederhergestellt'); } catch (err) { toast('Fehler: ' + err.message); } };
-$('#nameF').onsubmit = async e => { e.preventDefault(); try { const r = await api('/api/auth/name', { method: 'POST', body: { display: $('#dname').value } });
-  me.display = r.display; me.shown = r.shown; $('#dname').value = r.display; $('#hello').textContent = 'Hallo ' + r.shown; $('#wb-user span').textContent = r.shown; toast('Name gespeichert'); } catch (err) { toast(err.message); } };
+$('#nameF').onsubmit = async e => { e.preventDefault(); note(e.target, ''); try { const r = await api('/api/auth/name', { method: 'POST', body: { display: $('#dname').value } });
+  me.display = r.display; me.shown = r.shown; $('#dname').value = r.display; $('#hello').textContent = 'Hallo ' + r.shown; $('#wb-user span').textContent = r.shown; note(e.target, 'Gespeichert.', 'ok', `Du wirst jetzt als „${r.shown}“ angezeigt. Anmelden tust du dich weiter mit „${me.name}“.`); } catch (err) { fail(e.target, err); } };
+// Pflicht-Schritte für neue Zugänge: zeigt, was erledigt ist und was jetzt dran ist
+let forced = null;
+function steps() {
+  forced = forced || { pw: me.mustChange || !!sessionStorage.getItem('wb-konto-pw'), tfa: me.setup2fa };
+  if (!me.mustChange && !me.setup2fa) return;
+  const list = [forced.pw && { t: 'Eigenes Passwort festlegen (Formular „Passwort ändern“)', done: !me.mustChange },
+    forced.tfa && { t: 'Zwei-Faktor einrichten (Pflicht für dein Konto)', done: !!me.totp },
+    { t: forced.tfa ? 'Wiederherstellungscodes sichern, dann sind deine Seiten freigeschaltet' : 'Danach sind deine Seiten freigeschaltet', done: false }].filter(Boolean);
+  const now = list.findIndex(x => !x.done);
+  $('#force').innerHTML = `<div class="panel warnbox" style="margin-bottom:14px"><b>So wird dein Zugang fertig</b>
+    <div class="steps">${list.map((x, i) => `<div class="${x.done ? 'done' : i === now ? 'now' : ''}"><i>${x.done ? '✓' : i + 1}</i><span>${esc(x.t)}${i === now ? ' <b>← jetzt</b>' : ''}</span></div>`).join('')}</div></div>`;
+}
 (async () => { me = await WB.me(); $('#hello').textContent = 'Hallo ' + me.shown; $('#dname').value = me.display; $('#dname').placeholder = me.name; $('#lname').textContent = me.name;
   if (me.setup2fa) $('#dataBox').classList.add('hide');
   if (me.cockpit && !me.setup2fa && !me.mustChange) api('/api/data/cockpit').then(saved => { $('#ckBox').classList.remove('hide');
     WB.Cockpit.settings($('#ckSet'), WB.Cockpit.normalize(saved), c => WB.Store.set('cockpit', c)); }).catch(e => toast(e.message));
   $('#sub').textContent = `${me.owner ? 'Owner' : me.admin ? 'Admin' : 'Nutzer'} · Zugriff auf ${me.apps.length} Apps${me.expires ? ' · Zugang bis ' + new Date(me.expires).toLocaleDateString('de-DE') : ''}`;
-  const need = me.mustChange ? ['Bitte zuerst ein eigenes Passwort festlegen.', me.setup2fa ? 'Danach richtest du noch Zwei-Faktor ein.' : 'Danach sind deine Apps freigeschaltet.']
-    : me.setup2fa ? ['Bitte richte jetzt die Zwei-Faktor-Anmeldung ein.', 'Sie ist für dein Konto Pflicht. Danach sind deine Apps freigeschaltet.'] : null;
-  if (need) $('#force').innerHTML = `<div class="panel warnbox" style="margin-bottom:14px"><b>${need[0]}</b> <span class="mute">${need[1]}</span></div>`;
+  steps();
+  if (me.mustChange) $('#oldHint').textContent = 'Das Passwort, mit dem du dich gerade angemeldet hast, zum Beispiel das vom Admin.';
+  if (sessionStorage.getItem('wb-konto-pw')) { sessionStorage.removeItem('wb-konto-pw'); if (me.setup2fa) note($('#pwF'), 'Passwort geändert.', 'ok', 'Ab jetzt gilt nur noch das neue Passwort. Beim Bestätigen von Zwei-Faktor gibst du das neue ein.'); }
   tfa(); sess(); })();
 </script>
 </body></html>

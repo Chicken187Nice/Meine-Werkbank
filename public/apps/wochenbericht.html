@@ -1,29 +1,36 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Wochenbericht</title>
 <style>
-  .art { padding: 14px 0; border-bottom: 1px solid var(--line); } .art:last-child { border: 0; }
-  .art a { text-decoration: none; font: 600 16px/1.35 var(--f-display); } .art a:hover { color: var(--acc); }
-  .art p { color: var(--mute); font-size: 14px; margin-top: 4px; }
-  .feed { display:grid; grid-template-columns: 1fr auto; gap: 6px; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .lead { margin-top: 14px; font-size: 15px; } .lead ol { margin: 8px 0 0; padding-left: 22px; } .lead li { margin: 3px 0; }
+  .lead a { text-decoration: none; } .lead a:hover { color: var(--acc); }
+  .ev { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 4px 12px; padding: 20px 0; border-top: 1px solid var(--line); scroll-margin-top: 80px; }
+  .ev .nr { font: 700 22px/1.2 var(--f-mono); color: var(--acc); } .ev h3 { font-size: 18px; line-height: 1.35; overflow-wrap: anywhere; }
+  .ev p { margin-top: 8px; line-height: 1.65; overflow-wrap: anywhere; } .ev .meta { margin-top: 8px; font-size: 12px; color: var(--faint); display: flex; gap: 6px 10px; flex-wrap: wrap; align-items: center; }
+  .ev details { margin-top: 8px; font-size: 13px; } .ev summary { cursor: pointer; color: var(--mute); } .ev ul { margin: 6px 0 0; padding-left: 18px; } .ev li { margin: 4px 0; overflow-wrap: anywhere; } .ev li small { color: var(--faint); }
+  @media (max-width: 520px) { .ev { grid-template-columns: minmax(0,1fr); } }
+  .feed > div { min-width: 0; overflow-wrap: anywhere; }
+  .feed { display:grid; grid-template-columns: minmax(0,1fr) auto; gap: 6px; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
   .feed small { color: var(--faint); display:block; overflow:hidden; text-overflow: ellipsis; white-space: nowrap; }
   .switch { display:flex; align-items:center; gap: 10px; cursor: pointer; }
 </style>
 </head><body>
 <main class="wrap">
   <div class="page-head">
-    <div><div class="label">17 · Automatik</div><h1>Wochenbericht</h1><p>Leg Quellen und Stichwörter fest. Der Server sammelt jeden Montagmorgen selbstständig alle passenden Artikel der letzten 7 Tage, auch wenn die Seite nicht offen ist.</p></div>
+    <div><div class="label">17 · Automatik</div><h1>Wochenbericht</h1><p>Die wichtigsten Ereignisse der letzten 7 Tage, zusammengefasst aus deinen Quellen. Der Server sammelt selbstständig, auch wenn die Seite nicht offen ist.</p></div>
     <div class="row"><button id="md">Als Markdown</button><button class="primary" id="build">Jetzt erstellen</button></div>
   </div>
   <div class="side">
     <div class="stack">
-      <div class="panel"><label class="switch"><input type="checkbox" id="auto"><span><b>Automatisch jeden Montag</b><br><span class="mute" style="font-size:12px">ab 7 Uhr, solange der Container läuft</span></span></label></div>
+      <div class="panel"><label class="switch"><input type="checkbox" id="auto"><span><b>Automatisch</b><br><span class="mute" style="font-size:12px">sammelt laufend und erstellt montags ab 7 Uhr den Bericht</span></span></label>
+        <label style="display:block;margin-top:12px;font-size:13px">Wie viele Ereignisse<select id="count"><option value="5">5</option><option value="7">7</option><option value="10">10</option></select></label></div>
       <div class="panel"><div class="panel-h"><span class="label">Stichwörter</span></div>
         <form class="row" id="kwF" style="flex-wrap:nowrap"><input id="kwIn" placeholder="z. B. Docker, KI, Bayern"><button>+</button></form>
         <div class="row" id="kws" style="margin-top:10px;gap:6px"></div>
-        <p class="faint" style="font-size:12px;margin-top:8px">Ohne Stichwörter landen alle Artikel im Bericht.</p></div>
+        <p class="faint" style="font-size:12px;margin-top:8px">Ereignisse zu deinen Stichwörtern werden bevorzugt.</p>
+        <label class="switch" style="margin-top:10px"><input type="checkbox" id="only"><span style="font-size:13px">Nur Ereignisse zu meinen Stichwörtern</span></label></div>
       <div class="panel"><div class="panel-h"><span class="label">Quellen (RSS/Atom)</span></div><div id="feeds"></div>
         <form class="stack" id="feedF" style="margin-top:10px"><input id="fName" placeholder="Name"><input id="fUrl" placeholder="https://…/rss.xml"><div class="row"><button type="button" id="test">Testen</button><button class="primary">Hinzufügen</button></div></form>
         <div class="row" style="margin-top:10px;gap:6px" id="presets"></div></div>
@@ -40,25 +47,39 @@ let C = { feeds: [{ id: 'f1', name: 'heise online', url: PRE[1][1] }, { id: 'f2'
 let rep = null;
 const save = () => Store.set('wochenbericht', C);
 function renderCfg() {
-  $('#auto').checked = !!C.auto;
+  $('#auto').checked = !!C.auto; $('#only').checked = C.only === true; $('#count').value = [5, 7, 10].includes(C.count) ? C.count : 7;
   $('#kws').innerHTML = C.keywords.map((k,i) => `<span class="chip on">${esc(k)} <button class="ghost" style="padding:0;color:inherit;border:0;background:none" data-kw="${i}">✕</button></span>`).join('') || '<span class="faint" style="font-size:13px">keine</span>';
   $('#feeds').innerHTML = C.feeds.map(f => `<div class="feed"><div>${esc(f.name)}<small>${esc(f.url)}</small></div><span style="display:flex"><button class="ghost sm" data-edf="${f.id}" title="Bearbeiten">✎</button><button class="ghost sm" data-fd="${f.id}">✕</button></span></div>`).join('') || '<div class="faint" style="font-size:13px">Keine Quellen</div>';
   $('#presets').innerHTML = PRE.filter(([,u]) => !C.feeds.some(f => f.url === u)).map(([n,u]) => `<button class="chip" data-pre="${esc(u)}" data-n="${esc(n)}">+ ${esc(n)}</button>`).join('');
 }
+const day = d => new Date(d).toLocaleDateString('de-DE', { day: 'numeric', month: 'long' });
+const span = (a, b) => !a ? '' : day(a) === day(b || a) ? day(a) : `${day(a)} bis ${day(b)}`;
+const web = u => /^https?:\/\//i.test(u) ? u : '#';
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 function renderRep() {
-  if (!rep) return; const by = {};
-  rep.items.forEach(i => { const d = i.date ? new Date(i.date).toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' }) : 'ohne Datum'; (by[d] = by[d] || []).push(i); });
-  $('#report').innerHTML = `<div class="row between"><div><div class="label">Woche ${esc(rep.week)}</div><h2 style="margin-top:6px">${rep.items.length} Artikel</h2></div><span class="mute" style="font-size:12px">erstellt ${new Date(rep.created).toLocaleString('de-DE')}</span></div>
+  if (!rep) return; const ev = rep.events || [];
+  // Quellen liefern anfangs nur die letzten Tage: das offen sagen
+  const short = rep.since && new Date(rep.created) - new Date(rep.since) < 4 * 864e5;
+  $('#report').innerHTML = `<div class="row between"><div><div class="label">Woche ${esc(rep.week)}</div><h2 style="margin-top:6px">Das war wichtig</h2></div><span class="mute" style="font-size:12px">erstellt ${new Date(rep.created).toLocaleString('de-DE')}</span></div>
     ${rep.errors?.length ? `<div class="sunk warn" style="margin-top:10px;font-size:13px">Nicht erreichbar: ${rep.errors.map(esc).join(', ')}</div>` : ''}
-    ${rep.items.length ? Object.entries(by).map(([d, items]) => `<h3 style="margin:22px 0 4px" class="acc">${esc(d)}</h3>${items.map(i => `<div class="art"><a href="${esc(/^https?:\/\//i.test(i.link) ? i.link : "#")}" target="_blank" rel="noopener noreferrer">${esc(i.title)}</a><p>${esc(i.summary)}</p><div class="row" style="gap:6px;margin-top:6px"><span class="chip">${esc(i.source)}</span>${(i.matched||[]).map(m => `<span class="chip on">${esc(m)}</span>`).join('')}</div></div>`).join('')}`).join('') : '<div class="empty" style="margin-top:14px">Diese Woche passte nichts zu deinen Stichwörtern.</div>'}`;
+    ${short ? `<div class="sunk" style="margin-top:10px;font-size:13px">Dieser Bericht reicht erst bis zum ${esc(day(rep.since))} zurück, weil die Quellen nicht mehr liefern. Mit „Automatisch“ sammelt die Werkbank laufend, dann deckt der nächste Bericht die ganze Woche ab.</div>` : ''}
+    ${ev.length ? `<div class="lead">Die Themen vom ${esc(span(rep.since, rep.until))}, ausgewertet aus ${plural(rep.total, 'Meldung', 'Meldungen')} von ${esc(rep.sources.join(', '))}:<ol>${ev.map((e, i) => `<li><a href="#e${i}">${esc(e.title)}</a></li>`).join('')}</ol></div>
+      <div style="margin-top:18px">${ev.map((e, i) => `<article class="ev" id="e${i}"><span class="nr">${i + 1}</span><div><h3>${esc(e.title)}</h3>${e.text ? `<p>${esc(e.text)}</p>` : ''}
+        <div class="meta"><span>${esc(span(e.from, e.to))}</span><span>${plural(e.count, 'Meldung', 'Meldungen')}</span><span>${esc(e.sources.join(', '))}</span>${(e.matched || []).map(m => `<span class="chip on">${esc(m)}</span>`).join('')}</div>
+        ${e.links.length ? `<details><summary>Nachlesen</summary><ul>${e.links.map(l => `<li><a href="${esc(web(l.link))}" target="_blank" rel="noopener noreferrer">${esc(l.title)}</a> <small>${esc(l.source)}</small></li>`).join('')}</ul></details>` : ''}</div></article>`).join('')}</div>`
+      : `<div class="empty" style="margin-top:14px">${rep.only ? 'Diese Woche passte nichts zu deinen Stichwörtern.' : 'Die Quellen haben diese Woche nichts geliefert.'}</div>`}`;
 }
 async function loadArch() { const l = await api('/api/news/reports').catch(() => []);
   $('#arch').innerHTML = l.length ? l.map(w => `<div class="it"><button class="ghost sm" data-wk="${w}" style="width:100%;justify-content:flex-start">Woche ${w}</button></div>`).join('') : '<div class="faint" style="font-size:13px">leer</div>';
   if (l[0] && !rep) { rep = await api('/api/news/reports/' + l[0]); renderRep(); } }
 $('#build').onclick = async () => { if (!C.feeds.length) return toast('Erst eine Quelle hinzufügen'); $('#build').disabled = true; $('#build').textContent = 'Sammle …';
-  try { await Store.flush(); rep = await api('/api/news/build', { method: 'POST' }); renderRep(); loadArch(); toast(rep.items.length + ' Artikel gefunden'); } catch (e) { toast('Fehler: ' + e.message); }
+  try { await Store.flush(); rep = await api('/api/news/build', { method: 'POST' }); renderRep(); loadArch(); toast(`${plural(rep.events.length, 'Ereignis', 'Ereignisse')} aus ${plural(rep.total, 'Meldung', 'Meldungen')}`); } catch (e) { toast('Fehler: ' + e.message); }
   $('#build').disabled = false; $('#build').textContent = 'Jetzt erstellen'; };
 $('#auto').onchange = e => { C.auto = e.target.checked; save(); };
+$('#only').onchange = e => { C.only = e.target.checked; save(); };
+$('#count').onchange = e => { C.count = +e.target.value; save(); };
+// Sprung zu einem Ereignis, ohne die Adresse zu ändern
+$('#report').addEventListener('click', e => { const a = e.target.closest('.lead a'); if (a) { e.preventDefault(); $(a.getAttribute('href')).scrollIntoView({ behavior: 'smooth' }); } });
 $('#kwF').onsubmit = e => { e.preventDefault(); $('#kwIn').value.split(',').map(s => s.trim()).filter(Boolean).forEach(k => C.keywords.push(k)); $('#kwIn').value = ''; save(); renderCfg(); };
 $('#feedF').onsubmit = e => { e.preventDefault(); const u = $('#fUrl').value.trim(); if (!/^https?:\/\//.test(u)) return toast('URL muss mit http(s) beginnen'); C.feeds.push({ id: uid(), name: $('#fName').value.trim() || new URL(u).hostname, url: u }); $('#fUrl').value = $('#fName').value = ''; save(); renderCfg(); };
 $('#test').onclick = async () => { const u = $('#fUrl').value.trim(); if (!u) return; try { const r = await api('/api/feed?url=' + encodeURIComponent(u)); toast(r.length ? `OK: ${r.length} Einträge, z. B. „${r[0].title.slice(0,40)}…“` : 'Erreichbar, aber keine Einträge erkannt'); } catch (e) { toast('Nicht erreichbar: ' + e.message); } };
@@ -70,7 +91,7 @@ document.addEventListener('click', async e => { const b = e.target.closest('butt
   if (d.pre) { C.feeds.push({ id: uid(), name: d.n, url: d.pre }); save(); renderCfg(); }
   if (d.wk) { rep = await api('/api/news/reports/' + d.wk); renderRep(); } });
 $('#md').onclick = () => { if (!rep) return toast('Erst einen Bericht erstellen');
-  WB.download(`wochenbericht-${rep.week}.md`, `# Wochenbericht ${rep.week}\n\n` + rep.items.map(i => `- [${i.title}](${i.link}) · ${i.source}${i.date ? ' · ' + new Date(i.date).toLocaleDateString('de-DE') : ''}`).join('\n'), 'text/markdown'); };
+  WB.download(`wochenbericht-${rep.week}.md`, `# Wochenbericht ${rep.week}\n\n` + rep.events.map((e, i) => `## ${i + 1}. ${e.title}\n\n${e.text}\n\n${span(e.from, e.to)} · ${e.links.map(l => `[${l.source}](${l.link})`).join(', ')}\n`).join('\n'), 'text/markdown'); };
 (async () => { C = Object.assign(C, await Store.get('wochenbericht', C)); save(); renderCfg(); loadArch(); })();
 </script>
 </body></html>

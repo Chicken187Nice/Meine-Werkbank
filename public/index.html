@@ -1,34 +1,34 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script>
 <title>Werkbank</title>
 <style>
   .topbar { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
-  .topbar .in { max-width: 1240px; margin: 0 auto; padding: 12px 22px; display: grid; grid-template-columns: auto minmax(0, 560px) auto; gap: 18px; align-items: center; justify-content: space-between; }
+  .topbar .in { max-width: var(--wb-wh, 1240px); margin: 0 auto; padding: 12px 22px; display: grid; grid-template-columns: auto minmax(0, 560px) auto; gap: 18px; align-items: center; justify-content: space-between; }
   .brand { display:flex; align-items:center; gap: 10px; font: 700 15px var(--f-display); letter-spacing: .1em; }
   .brand i { width: 26px; height: 26px; border-radius: 8px; display:grid; place-items:center; background: conic-gradient(from 200deg, #3ddc97, #5aa9ff, #a78bfa, #ff5a6e, #ffbd4a, #3ddc97); }
   .brand i::after { content:''; width: 12px; height: 12px; background: var(--bg); border-radius: 3px; }
-  .search { position: relative; } .search input { padding: 10px 14px 10px 40px; border-radius: 12px; background: var(--bg2); }
+  .search { position: relative; } .search input { padding: 10px 14px 10px 40px; border-radius: calc(var(--r-sm) + 3px); background: var(--bg2); }
   .search svg { position:absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--faint); }
   .search .kbd { position:absolute; right: 10px; top: 50%; transform: translateY(-50%); }
-  .wrap { max-width: 1240px; container-type: inline-size; }
+  .wrap { max-width: var(--wb-wh, 1240px); container-type: inline-size; }
   /* Cockpit: ab 1280 px links und rechts neben den Kacheln, darunter als Raster unter der Übersicht */
   .ck, .ck-row:empty { display: none; }
-  body.ck-side .stage { display: grid; grid-template-columns: var(--ckw) minmax(0, 1240px) var(--ckw); justify-content: center; align-items: start; --ckw: clamp(208px, 15.5vw, 272px); }
-  body.ck-side .stage > .wrap { margin: 0; max-width: none; width: 100%; padding-left: 16px; padding-right: 16px; }
-  body.ck-side .ck { display: flex; flex-direction: column; gap: 12px; position: sticky; top: 70px; max-height: calc(100vh - 70px); overflow-y: auto; padding: 26px 0 24px 14px; scrollbar-width: thin; scrollbar-color: transparent transparent; }
-  body.ck-side .ck:hover { scrollbar-color: var(--line2) transparent; }
+  body.ck-side .stage { display: grid; --ckw: clamp(172px, 12vw, 208px); --cks: calc(var(--ckw) + 36px); align-items: start;
+    grid-template-columns: minmax(var(--cks), 1fr) minmax(0, calc(var(--wb-wh, 1240px) - 44px)) minmax(var(--cks), 1fr); } /* Seitenspalten mittig zwischen Hauptbereich und Rand */
+  body.ck-side .stage > .wrap { margin: 0; max-width: none; width: 100%; padding-left: 0; padding-right: 0; }
+  body.ck-side .ck { display: flex; flex-direction: column; position: sticky; top: 70px; align-self: start; max-height: calc(100vh / var(--wb-z, 1) - 70px); max-height: calc(100dvh / var(--wb-z, 1) - 70px); overflow: hidden; padding: 15px 10px 12px; justify-self: center; width: calc(var(--ckw) + 20px); }
   body.ck-side .ck > * { flex: none; }
-  body.ck-side #ckR { padding: 26px 14px 24px 0; }
-  body.ck-side .topbar .in { max-width: 1790px; }
-  .ck-row:not(:empty) { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); grid-auto-flow: dense; gap: 10px; margin: -14px 0 30px; align-items: stretch; }
+  body.ck-side .topbar .in { max-width: calc(var(--wb-wh, 1240px) + 550px); }
+  .ck-row:not(:empty) { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); grid-auto-flow: dense; gap: 0 22px; margin-bottom: 30px; align-items: stretch; }
   .ck-row .wide { grid-column: span 2; } .ck-row .lamps { grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); }
-  .hero { display:grid; grid-template-columns: 1.05fr 1.25fr .9fr; gap: 14px; margin: 26px 0 30px; }
-  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: 18px; padding: 22px; position: relative; overflow: hidden; }
+  .hero { display:grid; grid-template-columns: var(--herocols, 1.05fr 1.25fr .9fr); grid-auto-flow: dense; gap: var(--tgap, 14px); margin: 26px 0 30px; }
+  .card { background: var(--bg2); border: 1px solid var(--line); border-radius: calc(var(--r) * 1.29); padding: 22px; position: relative; overflow: hidden; }
   .clock-card::before { content:''; position:absolute; inset: -40% -20% auto auto; width: 320px; height: 320px; border-radius: 50%; background: radial-gradient(circle, var(--glow), transparent 70%); }
   .greet { font: 600 22px/1.2 var(--f-display); color: var(--mute); position: relative; } .greet b { color: var(--text); font-weight: 600; }
-  .clock { font: 700 clamp(58px, 7vw, 92px)/.95 var(--f-mono); letter-spacing: -.05em; margin-top: 12px; position: relative; }
+  .clock-card { container-type: inline-size; } .clock-card.mitte { text-align: center; }
+  .clock { font: 700 min(calc(clamp(58px, 7vw, 92px) * var(--clk, 1)), 25cqw)/.95 var(--f-mono); letter-spacing: -.05em; margin-top: 12px; position: relative; }
   .clock small { font-size: .3em; color: var(--faint); letter-spacing: 0; margin-left: 4px; }
   .date { color: var(--mute); margin-top: 8px; font-size: 14px; position: relative; }
   .arc { position: relative; height: 34px; margin-top: 20px; }
@@ -36,7 +36,7 @@
   .arc .day { position:absolute; top: 10px; height: 7px; border-radius: 4px; background: linear-gradient(90deg, #ffbd4a, var(--acc), #ff5a6e); opacity: .55; }
   .arc .now { position:absolute; top: 6px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--acc); box-shadow: 0 0 0 5px var(--glow); }
   .arc .lbl { position:absolute; top: 22px; font: 11px var(--f-mono); color: var(--faint); transform: translateX(-50%); }
-  .today h2 { font-size: 17px; display:flex; align-items:center; gap: 10px; margin-bottom: 8px; }
+  .today h2 { font-size: 17px; display:flex; flex-wrap: wrap; align-items:center; gap: 10px; margin-bottom: 8px; }
   .ti { display:flex; align-items:center; gap: 12px; padding: 9px 8px; margin: 0 -8px; border-radius: 10px; text-decoration:none; color: var(--text); }
   .ti:hover { background: var(--bg3); }
   .ti .ic { width: 30px; height: 30px; border-radius: 9px; display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 16%, transparent); flex: none; }
@@ -56,14 +56,14 @@
   .sec-h h2 { font-size: 18px; display:flex; align-items:center; gap: 10px; }
   .sec-h h2 i { width: 12px; height: 12px; border-radius: 4px; background: var(--g); box-shadow: 0 0 0 4px color-mix(in srgb, var(--g) 18%, transparent); }
   .sec-h span { color: var(--faint); font-size: 13px; }
-  .tiles { display:grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 12px; }
-  .tile { position: relative; display:grid; grid-template-columns: 44px 1fr; gap: 4px 14px; align-items: start; padding: 16px; text-decoration:none; color: inherit; border-radius: 16px;
+  .tiles { display:grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--tmin-u, var(--tmin, 232px)), 100%), 1fr)); gap: var(--tgap, 12px); container-type: inline-size; }
+  .tile { position: relative; display:grid; grid-template-columns: calc(44px * var(--icon, 1)) minmax(0,1fr); gap: 4px 14px; align-items: start; padding: 16px; text-decoration:none; color: inherit; border-radius: calc(var(--r) * 1.14);
     background: linear-gradient(160deg, color-mix(in srgb, var(--g) 9%, var(--bg2)), var(--bg2) 55%); border: 1px solid var(--line);
     transition: transform .2s var(--ease), border-color .2s, box-shadow .2s; min-height: 98px; }
   .tile:hover, .tile:focus-visible { transform: translateY(-2px); border-color: color-mix(in srgb, var(--g) 60%, transparent); box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--g) 60%, transparent); outline: none; }
-  .tile .ico { grid-row: span 3; width: 44px; height: 44px; border-radius: 12px; display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 17%, transparent); border: 1px solid color-mix(in srgb, var(--g) 30%, transparent); }
+  .tile .ico { grid-row: span 3; width: calc(44px * var(--icon, 1)); height: calc(44px * var(--icon, 1)); border-radius: calc(var(--r) * .86); display:grid; place-items:center; color: var(--g); background: color-mix(in srgb, var(--g) 17%, transparent); border: 1px solid color-mix(in srgb, var(--g) 30%, transparent); }
   .tile h3 { font-size: 16px; margin-top: 2px; } .tile p { font-size: 12.5px; color: var(--mute); line-height: 1.4; }
-  .tile .live { font: 500 11.5px var(--f-mono); color: var(--text); margin-top: 6px; min-height: 15px; display:flex; align-items:center; gap: 6px; }
+  .tile .live { font: 500 11.5px var(--f-mono); color: var(--text); margin-top: 6px; min-height: 15px; display:flex; flex-wrap: wrap; align-items:center; gap: 0 6px; }
   .tile .live .dot { width: 6px; height: 6px; background: var(--g); }
   .tile .tact { position:absolute; top: 8px; right: 8px; display:flex; gap: 4px; }
   .tile .pin, .tile .bell { width: 28px; height: 28px; padding: 0; opacity: 0; background: var(--bg); }
@@ -83,16 +83,79 @@
   @container (max-width: 660px) { .hero { grid-template-columns: minmax(0,1fr); } .hero .wx { grid-column: auto; } }
   @media (max-width: 720px) { .topbar .in { grid-template-columns: auto 1fr; } .topbar .search { grid-column: 1 / -1; grid-row: 2; } .topbar .in > .row { justify-content: flex-end; } }
   @media (max-width: 560px) { .topbar #phase { display: none; } .topbar #adminBtn, .topbar #userBtn { font-size: 0; gap: 0; } }
+  @media (max-width: 430px) { .topbar .brand { font-size: 0; gap: 0; } }
+  /* Persönliche Einstellungen: Übersicht */
+  .hero[data-n="0"] { display: none; }
+  .hero[data-n="1"] { grid-template-columns: minmax(0,1fr); } .hero[data-n="2"] { grid-template-columns: 1fr 1fr; }
+  .hero[data-n="1"] .wx, .hero[data-n="2"] .wx { grid-column: auto; }
+  @container (max-width: 660px) { .hero[data-n="2"] { grid-template-columns: minmax(0,1fr); } }
+  .hero > .off, .pinned.off, .foot.off { display: none; }
+  .clock .ampm { margin-left: 8px; }
+  /* Persönliche Einstellungen: Kacheln */
+  .tile.off { display: none; }
+  .searching .tile.off:not(.hidden) { display: grid; }
+  .tiles[data-cols] { grid-template-columns: repeat(auto-fill, minmax(max(var(--tmin-c, 150px), calc((100% - (var(--cols) - 1) * 12px) / var(--cols))), 1fr)); }
+  :root[data-tiles="kompakt"] .tiles { --tmin: 178px; }
+  :root[data-tiles="kompakt"] .tile { grid-template-columns: calc(32px * var(--icon, 1)) minmax(0,1fr); gap: 2px 10px; padding: 10px 12px; min-height: 0; align-items: center; }
+  :root[data-tiles="kompakt"] .tile .ico { width: calc(32px * var(--icon, 1)); height: calc(32px * var(--icon, 1)); } :root[data-tiles="kompakt"] .tile .ico svg { width: calc(17px * var(--icon, 1)); height: calc(17px * var(--icon, 1)); }
+  :root[data-tiles="kompakt"] .tile h3 { font-size: 14px; margin: 0; } :root[data-tiles="kompakt"] .tile p { display: none; }
+  :root[data-tiles="kompakt"] .tile .live { margin: 0; min-height: 0; } :root[data-tiles="kompakt"] .tile .live:empty { display: none; }
+  :root[data-tiles="liste"] .tiles { grid-template-columns: minmax(0,1fr); gap: 6px; }
+  :root[data-tiles="liste"] .tiles[data-cols] { grid-template-columns: repeat(auto-fill, minmax(max(300px, calc((100% - (var(--cols) - 1) * 6px) / var(--cols))), 1fr)); }
+  :root[data-tiles="liste"] .tile { grid-template-columns: calc(30px * var(--icon, 1)) minmax(0,auto) minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 8px 80px 8px 12px; min-height: 0; }
+  :root[data-tiles="liste"] .tile .ico { grid-row: auto; width: calc(30px * var(--icon, 1)); height: calc(30px * var(--icon, 1)); } :root[data-tiles="liste"] .tile .ico svg { width: calc(16px * var(--icon, 1)); height: calc(16px * var(--icon, 1)); }
+  :root[data-tiles="liste"] .tile h3 { font-size: 14px; margin: 0; white-space: nowrap; } :root[data-tiles="liste"] .tile p { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  :root[data-tiles="liste"] .tile .live { margin: 0; white-space: nowrap; flex-wrap: nowrap; } :root[data-tiles="liste"] .tile .tact { top: 50%; transform: translateY(-50%); }
+  :root[data-tiles="symbole"] .tiles { --tmin: 112px; --tmin-c: 92px; }
+  :root[data-tiles="symbole"] .tile { grid-template-columns: minmax(0,1fr); justify-items: center; text-align: center; align-content: start; gap: 8px; padding: 30px 8px 14px; min-height: 0; }
+  :root[data-tiles="symbole"] .tile .ico { grid-row: auto; width: calc(52px * var(--icon, 1)); height: calc(52px * var(--icon, 1)); } :root[data-tiles="symbole"] .tile .ico svg { width: calc(26px * var(--icon, 1)); height: calc(26px * var(--icon, 1)); }
+  :root[data-tiles="symbole"] .tile h3 { font-size: 13px; margin: 0; overflow-wrap: anywhere; hyphens: auto; } :root[data-tiles="symbole"] .tile :is(p, .live) { display: none; }
+  :root[data-tiles="symbole"] .tile .tact { top: 4px; right: 4px; gap: 2px; } :root[data-tiles="symbole"] .tile :is(.pin, .bell) { width: 24px; height: 24px; }
+  .no-desc .tile p, .no-live .tile .live, .no-head .sec:not(.pinned) .sec-h { display: none; }
+  .no-head .sec:not(.pinned) { margin-top: 12px; }
+  .no-gdesc .sec-h span { display: none; }
+  .tile .ico svg { width: calc(21px * var(--icon, 1)); height: calc(21px * var(--icon, 1)); }
+  .tile .ico .emo { font-size: calc(22px * var(--icon, 1)) !important; }
+  :root[data-tilegap] .sec .tiles { gap: var(--tgap); } :root[data-th] .sec .tiles .tile { min-height: var(--th); } :root[data-secgap] main .sec { margin-top: var(--secgap); }
+  :root[data-align="mitte"]:is([data-tiles="karten"], [data-tiles="kompakt"]) .tile { grid-template-columns: minmax(0,1fr); justify-items: center; text-align: center; align-content: start; gap: 6px; }
+  :root[data-align="mitte"]:is([data-tiles="karten"], [data-tiles="kompakt"]) .tile .ico { grid-row: auto; } :root[data-align="mitte"] .tile .live { justify-content: center; }
+  @container (min-width: 480px) { :root:not([data-tiles="liste"]) .tile.breit { grid-column: span 2; } :root:not([data-tiles="liste"]) .tile.gross { grid-column: span 2; grid-row: span 2; align-content: center; } }
+  @container (min-width: 240px) { :root[data-tiles="symbole"] .tile:is(.breit, .gross) { grid-column: span 2; } }
+  .sec.foldable .sec-h { cursor: pointer; user-select: none; } .sec.foldable .sec-h::after { content: '▾'; margin-left: auto; color: var(--faint); } .sec.closed .sec-h::after { content: '▸'; }
+  .sec.closed .tiles { display: none; } .searching .sec.closed .tiles, .arranging .sec.closed .tiles { display: grid; }
+  /* Übersicht */
+  .hero[data-stack="1"] { grid-template-columns: minmax(0,1fr); } .hero[data-stack="1"] .wx { grid-column: auto; }
+  .face { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; position: relative; } .clock-card.mitte .face { justify-content: center; }
+  .analog { width: calc(132px * var(--clk, 1)); max-width: 100%; height: auto; aspect-ratio: 1; margin-top: 12px; }
+  .face .clock { min-width: 0; } .face:has(.analog) .clock { font-size: calc(44px * var(--clk, 1)); }
+  .today.compact .ti { padding-top: 3px; padding-bottom: 3px; } .today.compact .ti small { display: none; } .today.noicons .ti .ic { display: none; }
+  .fc { grid-template-columns: repeat(auto-fit, minmax(52px, 1fr)); }
+  /* Kopfzeile */
+  .topbar .off, .topbar .ck-off { display: none !important; } .topbar .in.nosearch { grid-template-columns: auto auto; }
+  .topbar .in:has(.brand.off):not(.nosearch) { grid-template-columns: minmax(0, 560px) auto; } .topbar .in.nosearch:has(.brand.off) { grid-template-columns: auto; justify-content: end; }
+  .topbar .nonames :is(#adminBtn, #userBtn) { font-size: 0; gap: 0; }
+  /* Kacheln anordnen */
+  .arranging .tile h3 { padding-right: 56px; } :root[data-tiles="symbole"] .arranging .tile h3 { padding-right: 0; }
+  .arranging .tile { cursor: grab; border-style: dashed; border-color: var(--acc); } .arranging .tile.dragging { opacity: .35; }
+  .arranging .tile .tact { opacity: 1; } .tile .move { width: 28px; height: 28px; padding: 0; background: var(--bg); }
+  .arrbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 60; display: flex; gap: 14px; align-items: center; padding: 10px 12px 10px 18px; width: max-content; max-width: calc(100% - 24px);
+    background: var(--bg3); border: 1px solid var(--acc); border-radius: 14px; box-shadow: 0 14px 34px -14px rgba(0,0,0,.7); font-size: 13px; }
+  :root[data-headfix="0"] body.ck-side .ck { top: 0; max-height: calc(100vh / var(--wb-z, 1)); max-height: calc(100dvh / var(--wb-z, 1)); }
+  body.ck-side .stage { --ckw: calc(clamp(172px, 12vw, 208px) * var(--ck-scale, 1)); }
+  .ck, .ck-row { opacity: var(--ck-alpha, 1); } :root[data-ckcolor] :is(.ck, .ck-row) { --acc: var(--ck-color); --s1: var(--ck-color); }
+  :root[data-cklines="0"] :is(.ck > .ckw + .ckw, .ck-row .ckw) { border-top-color: transparent; }
+  .hero + .ck-row:not(:empty) { margin-top: -14px; } .ck-row:not(:empty) { margin-top: 18px; }
 </style>
 </head><body>
 <header class="topbar"><div class="in">
-  <div class="brand"><i></i>WERKBANK</div>
+  <div class="brand"><i></i><span id="brandName">WERKBANK</span></div>
   <label class="search"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
     <input id="q" placeholder="App suchen und mit Enter öffnen …" autocomplete="off"><span class="kbd">/</span></label>
   <div class="row" style="gap:4px">
     <span class="chip" id="phase"></span>
     <button class="ghost icon" id="theme" title="Design umschalten"></button>
     <button class="ghost icon hide" id="ckBtn" title="Cockpit einstellen" aria-label="Cockpit einstellen"></button>
+    <button class="ghost icon" id="setBtn" title="Einstellungen" aria-label="Einstellungen"></button>
     <a class="btn ghost sm hide" href="/apps/admin" id="adminBtn"></a>
     <a class="btn ghost sm" href="/apps/konto" id="userBtn"></a>
     <button class="ghost icon" id="out" title="Überall abmelden"></button>
@@ -102,14 +165,15 @@
 <div class="stage">
 <aside class="ck" id="ckL" aria-label="Cockpit links"></aside>
 <main class="wrap">
-  <section class="hero">
-    <div class="card clock-card"><div class="greet" id="greet"></div><div class="clock" id="clock"></div><div class="date" id="date"></div><div class="arc" id="arc"></div></div>
+  <section class="hero" id="hero">
+    <div class="card clock-card"><div class="greet" id="greet"></div><div class="face" id="face"></div><div class="date" id="date"></div><div class="arc" id="arc"></div></div>
     <div class="card today"><h2><span class="dot" style="background:var(--acc)"></span>Heute <span class="chip" id="todayCount" style="font-size:11px"></span><span class="grow"></span><button class="ghost sm" id="nfBtn" title="Einstellen, welche Kacheln hier melden">Hinweise einstellen</button></h2><div id="todayList"><div class="faint" style="font-size:13px">Lädt …</div></div></div>
     <div class="card wx" id="wx"></div>
   </section>
   <div class="ck-row" id="ckRow" aria-label="Cockpit"></div>
 
   <section class="sec pinned" id="pinSec"><div class="sec-h"><h2 style="--g:var(--acc)"><i></i>Angeheftet</h2><span>Deine schnellsten Wege</span></div><div class="tiles" id="pins"></div></section>
+  <section class="sec pinned" id="recentSec"><div class="sec-h"><h2 style="--g:var(--acc)"><i></i>Zuletzt benutzt</h2><span>Da warst du zuletzt</span></div><div class="tiles" id="recent"></div></section>
   <div id="groups"></div>
 
   <div class="foot"><span>Werkbank · läuft in Docker auf deinem Server</span><span><span class="kbd">/</span> suchen · <span class="kbd">Esc</span> in jeder App führt zurück · Stecknadel heftet an</span></div>
@@ -119,7 +183,7 @@
 <dialog id="ckDlg"><form method="dialog" class="stack"><div class="row between"><h3>Cockpit einstellen</h3><button class="ghost sm">Fertig</button></div>
   <p class="mute" style="font-size:13px">Leg fest, welche Anzeige wo steht. Auf schmalen Bildschirmen erscheinen sie unter der Übersicht.</p><div id="ckSet"></div></form></dialog>
 
-<dialog id="nfDlg" style="width:min(620px,94vw)"><form method="dialog"><div class="row between" style="margin-bottom:6px"><h3>Hinweise auf der Startseite</h3><button class="ghost sm">Fertig</button></div>
+<dialog id="nfDlg" style="width:min(620px,calc(94vw / var(--wb-z, 1)))"><form method="dialog"><div class="row between" style="margin-bottom:6px"><h3>Hinweise auf der Startseite</h3><button class="ghost sm">Fertig</button></div>
   <p class="mute" style="font-size:13px;margin-bottom:8px">Leg für jede Kachel fest, ob sie im Bereich „Heute“ melden darf, wenn etwas fehlt oder ansteht. Das geht auch direkt über die Glocke an jeder Kachel.</p>
   <div id="nfList" style="max-height:60vh;overflow:auto"></div></form></dialog>
 <dialog id="nameDlg"><form class="stack" id="nameF"><h3>Wie möchtest du heißen?</h3>
@@ -136,23 +200,34 @@
 
 <script>
 const { $, $$, esc, icon, APPS, GROUPS, groupColor, Store, api, eur, today, ymd, parseYmd, daysBetween, PHASE_NAME, applyTheme, cycleTheme, themeMode } = WB;
+const P = () => WB.getPrefs();
 let me, hub = { city: null, pins: [], notify: {} }, allowed = [];
 const gc = g => groupColor(g);
 
-function setThemeIcon() { const m = themeMode(); $('#theme').innerHTML = icon(m === 'hell' ? 'sun' : m === 'dunkel' ? 'moon' : 'auto', 17); $('#phase').textContent = PHASE_NAME[applyTheme()] + (m === 'auto' ? ' · auto' : ''); }
-$('#theme').onclick = () => { cycleTheme(); setThemeIcon(); drawArc(); tiles(); loadToday(); };
+function setThemeIcon() { const m = themeMode(); const id = applyTheme(); $('#theme').innerHTML = icon(WB.themeIcon(), 17); $('#phase').textContent = PHASE_NAME[id] + (m === 'auto' || m === 'system' ? ' · auto' : ''); }
+$('#theme').onclick = cycleTheme;
+$('#setBtn').innerHTML = icon('gear', 18); $('#setBtn').onclick = () => WB.openSettings();
 $('#out').innerHTML = icon('logout', 17); $('#out').onclick = WB.logout;
 
 // ---------- Uhr ----------
 let sun = null;
 const greetText = h => h < 5 ? 'Noch wach' : h < 10 ? 'Guten Morgen' : h < 14 ? 'Mahlzeit' : h < 17 ? 'Guten Tag' : h < 22 ? 'Guten Abend' : 'Gute Nacht';
 const kw = d => { const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const n = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - n); return Math.ceil(((x - new Date(Date.UTC(x.getUTCFullYear(), 0, 1))) / 864e5 + 1) / 7); };
-function tick() { const d = new Date(), h = d.getHours();
-  $('#greet').innerHTML = `${greetText(h)}, <b>${esc(me?.shown || '')}</b>`;
-  $('#clock').innerHTML = `${String(h).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}<small>${String(d.getSeconds()).padStart(2, '0')}</small>`;
-  $('#date').textContent = d.toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }) + ` · KW ${kw(d)}`;
+function analog(d, sec) {
+  const hand = (deg, len, w, c) => `<line x1="50" y1="50" x2="50" y2="${50 - len}" stroke="${c}" stroke-width="${w}" stroke-linecap="round" transform="rotate(${deg} 50 50)"/>`;
+  return `<svg class="analog" viewBox="0 0 100 100" role="img" aria-label="Analoguhr"><circle cx="50" cy="50" r="47" fill="none" stroke="var(--line2)" stroke-width="2"/>
+    ${Array.from({ length: 12 }, (_, i) => `<line x1="50" y1="6" x2="50" y2="${i % 3 ? 9 : 13}" stroke="var(--mute)" stroke-width="${i % 3 ? 1.2 : 2.4}" transform="rotate(${i * 30} 50 50)"/>`).join('')}
+    ${hand((d.getHours() % 12 + d.getMinutes() / 60) * 30, 24, 4.2, 'var(--text)')}${hand((d.getMinutes() + d.getSeconds() / 60) * 6, 35, 2.8, 'var(--text)')}${sec ? hand(d.getSeconds() * 6, 39, 1.1, 'var(--acc)') : ''}<circle cx="50" cy="50" r="3" fill="var(--acc)"/></svg>`;
+}
+function tick() { const d = new Date(), h = d.getHours(), p = P(), two = n => String(n).padStart(2, '0');
+  const hallo = p.greet === 'eigen' && p.greetText.trim() ? esc(p.greetText).replaceAll('{name}', () => `<b>${esc(me?.shown || '')}</b>`) : `${greetText(h)}, <b>${esc(me?.shown || '')}</b>`;
+  $('#greet').innerHTML = p.greet === 'aus' ? '' : hallo;
+  const digital = `<div class="clock" id="clock">${p.hour12 ? h % 12 || 12 : two(h)}:${two(d.getMinutes())}${p.seconds ? `<small>${two(d.getSeconds())}</small>` : ''}${p.hour12 ? `<small class="ampm">${h < 12 ? 'AM' : 'PM'}</small>` : ''}</div>`;
+  $('#face').innerHTML = (p.clockStyle === 'digital' ? '' : analog(d, p.seconds)) + (p.clockStyle === 'analog' ? '' : digital);
+  const fmt = { lang: { weekday: 'long', day: 'numeric', month: 'long' }, kurz: { weekday: 'short', day: 'numeric', month: 'short' }, zahlen: { day: '2-digit', month: '2-digit', year: 'numeric' } }[p.dateStyle];
+  $('#date').textContent = [p.showDate ? d.toLocaleDateString('de-DE', fmt) : '', p.showWeek ? `KW ${kw(d)}` : ''].filter(Boolean).join(' · ');
   if (d.getSeconds() === 0) { drawArc(); setThemeIcon(); } }
-function drawArc() { const d = new Date(), pct = x => (x / 24 * 100).toFixed(2) + '%', now = d.getHours() + d.getMinutes() / 60;
+function drawArc() { $('#arc').classList.toggle('hide', !P().showArc); const d = new Date(), pct = x => (x / 24 * 100).toFixed(2) + '%', now = d.getHours() + d.getMinutes() / 60;
   const sr = sun ? sun.rise : 7.5, ss = sun ? sun.set : 16.8, hm = x => `${String(Math.floor(x)).padStart(2, '0')}:${String(Math.round(x % 1 * 60)).padStart(2, '0')}`;
   $('#arc').innerHTML = `<div class="track"></div><div class="day" style="left:${pct(sr)};width:${pct(ss - sr)}"></div><div class="now" style="left:${pct(now)}" title="jetzt"></div>
     <span class="lbl" style="left:${pct(sr)}">↑${hm(sr)}</span><span class="lbl" style="left:${pct(ss)}">↓${hm(ss)}</span>`; }
@@ -161,12 +236,12 @@ function drawArc() { const d = new Date(), pct = x => (x / 24 * 100).toFixed(2) 
 const WMO = { 0: 'Klar', 1: 'Überwiegend klar', 2: 'Teils bewölkt', 3: 'Bedeckt', 45: 'Nebel', 48: 'Nebel', 51: 'Nieselregen', 53: 'Nieselregen', 55: 'Nieselregen', 61: 'Leichter Regen', 63: 'Regen', 65: 'Starker Regen', 71: 'Leichter Schnee', 73: 'Schnee', 75: 'Starker Schnee', 80: 'Schauer', 81: 'Schauer', 82: 'Heftige Schauer', 85: 'Schneeschauer', 86: 'Schneeschauer', 95: 'Gewitter', 96: 'Gewitter', 99: 'Gewitter' };
 async function weather() {
   if (!hub.city) { $('#wx').innerHTML = `<div class="label">Wetter</div><p class="mute" style="margin:12px 0 16px;font-size:14px">Leg deinen Ort fest, dann siehst du Wetter, Vorhersage und den Sonnenstand.</p><button class="primary" id="setCity">Ort wählen</button>`; $('#setCity').onclick = openCity; return; }
-  try { const c = hub.city;
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days=4`).then(r => r.json());
+  try { const c = hub.city, p = P(), wind = { kmh: 'km/h', ms: 'm/s', mph: 'mph' }[p.windUnit], deg = p.tempUnit === 'f' ? '°F' : '°';
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${c.lat}&longitude=${c.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset,precipitation_probability_max&timezone=auto&forecast_days=${Math.max(1, p.fcDays)}&temperature_unit=${p.tempUnit === 'f' ? 'fahrenheit' : 'celsius'}&wind_speed_unit=${p.windUnit}`).then(r => r.json());
     const toH = s => { const t = new Date(s); return t.getHours() + t.getMinutes() / 60; }; sun = { rise: toH(r.daily.sunrise[0]), set: toH(r.daily.sunset[0]) }; drawArc();
     $('#wx').innerHTML = `<div class="row between"><span class="label">${esc(c.name)}</span><button class="ghost sm" id="setCity">ändern</button></div>
-      <div class="t">${Math.round(r.current.temperature_2m)}°</div><div style="margin-top:6px">${WMO[r.current.weather_code] || '–'} <span class="faint" style="font-size:12px">· gefühlt ${Math.round(r.current.apparent_temperature)}° · ${Math.round(r.current.wind_speed_10m)} km/h</span></div>
-      <div class="fc">${r.daily.time.map((t, i) => `<div>${i ? new Date(t).toLocaleDateString('de-DE', { weekday: 'short' }) : 'Heute'}<b>${Math.round(r.daily.temperature_2m_max[i])}°</b>${Math.round(r.daily.temperature_2m_min[i])}° · ${r.daily.precipitation_probability_max[i] ?? 0}%</div>`).join('')}</div>`;
+      <div class="t">${Math.round(r.current.temperature_2m)}${deg}</div><div style="margin-top:6px">${WMO[r.current.weather_code] || '–'}${p.wxDetails ? ` <span class="faint" style="font-size:12px">· gefühlt ${Math.round(r.current.apparent_temperature)}° · ${Math.round(r.current.wind_speed_10m)} ${wind}</span>` : ''}</div>
+      ${p.fcDays ? `<div class="fc">${r.daily.time.slice(0, p.fcDays).map((t, i) => `<div>${i ? new Date(t).toLocaleDateString('de-DE', { weekday: 'short' }) : 'Heute'}<b>${Math.round(r.daily.temperature_2m_max[i])}°</b>${Math.round(r.daily.temperature_2m_min[i])}°${p.wxDetails ? ` · ${r.daily.precipitation_probability_max[i] ?? 0}%` : ''}</div>`).join('')}</div>` : ''}`;
     $('#setCity').onclick = openCity;
   } catch { $('#wx').innerHTML = `<div class="label">Wetter</div><p class="mute" style="margin-top:10px">Wetterdienst gerade nicht erreichbar.</p>`; } }
 function openCity() { $('#cityRes').innerHTML = ''; $('#cityDlg').showModal(); $('#cityQ').focus(); }
@@ -177,17 +252,43 @@ async function searchCity() { const q = $('#cityQ').value.trim(); if (!q) return
 $('#nfBtn').onclick = notifyDialog;
 $('#citySearch').onclick = searchCity; $('#cityQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); searchCity(); } };
 
-// ---------- Kacheln ----------
-const tile = a => `<a class="tile" href="/apps/${a.id}" data-id="${a.id}" data-s="${esc((a.t + ' ' + a.d + ' ' + a.g).toLowerCase())}" style="--g:${gc(a.g)}">
-  <span class="ico">${icon(a.id, 21)}</span><h3>${esc(a.t)}</h3><p>${esc(a.d)}</p><div class="live" data-live="${a.id}"></div>
-  <span class="tact">${NOTIFY[a.id] ? `<button class="ghost bell ${notifyOn(a.id) ? 'on' : ''}" data-bell="${a.id}" title="${notifyOn(a.id) ? 'Hinweise auf der Startseite: an. ' : 'Hinweise aus. '}${esc(NOTIFY[a.id].l)}">${icon(notifyOn(a.id) ? 'bell' : 'belloff', 14)}</button>` : ''}
-  <button class="ghost pin ${hub.pins.includes(a.id) ? 'on' : ''}" data-pin="${a.id}" title="${hub.pins.includes(a.id) ? 'Lösen' : 'Anheften'}">${icon('pin', 14)}</button></span></a>`;
+// ---------- Kacheln: Apps, eigene Links, eigene Gruppen ----------
+const LINKS = 'Meine Links';
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+const linkTiles = () => P().links.map(l => ({ id: l.id, t: l.n, d: host(l.u), g: l.g || LINKS, url: l.u, emo: l.i, c: l.c, link: true }));
+const allTiles = () => [...allowed, ...linkTiles()];
+let arranging = false;
+const tile = (a, off) => { const p = P(), size = p.apps[a.id]?.size, ext = a.link || p.newTab, pinned = hub.pins.includes(a.id);
+  const ico = a.link ? (a.emo ? `<span class="emo">${esc(a.emo)}</span>` : icon('lesezeichen', 21)) : icon(a.id, 21);
+  const acts = arranging ? `<button class="ghost move" data-shift="-1" title="nach vorn" aria-label="${esc(a.t)} nach vorn">‹</button><button class="ghost move" data-shift="1" title="nach hinten" aria-label="${esc(a.t)} nach hinten">›</button>`
+    : !p.tileButtons ? '' : `${NOTIFY[a.id] ? `<button class="ghost bell ${notifyOn(a.id) ? 'on' : ''}" data-bell="${a.id}" title="${notifyOn(a.id) ? 'Hinweise auf der Startseite: an. ' : 'Hinweise aus. '}${esc(NOTIFY[a.id].l)}">${icon(notifyOn(a.id) ? 'bell' : 'belloff', 14)}</button>` : ''}
+  <button class="ghost pin ${pinned ? 'on' : ''}" data-pin="${a.id}" title="${pinned ? 'Lösen' : 'Anheften'}">${icon('pin', 14)}</button>`;
+  return `<a class="tile${off ? ' off' : ''}${size ? ' ' + size : ''}" href="${a.link ? esc(a.url) : '/apps/' + a.id}"${ext ? ' target="_blank" rel="noopener noreferrer"' : ''}${arranging ? ' draggable="true"' : ''} data-id="${a.id}" data-s="${esc((a.t + ' ' + a.d + ' ' + WB.groupLabel(a.g)).toLowerCase())}" style="--g:${WB.appColor(a)}">
+  <span class="ico">${ico}</span><h3>${esc(a.t)}</h3><p>${esc(a.d)}</p><div class="live"${a.link ? '' : ` data-live="${a.id}"`}></div><span class="tact">${acts}</span></a>`; };
+const groupList = () => { const known = [...Object.keys(GROUPS), LINKS], o = P().order.filter(g => known.includes(g)); return [...o, ...known.filter(g => !o.includes(g))]; };
+function sortTiles(list) { const p = P(), pos = id => { const i = p.tileOrder.indexOf(id); return i < 0 ? 1e6 : i; };
+  if (p.sort === 'az') return [...list].sort((a, b) => a.t.localeCompare(b.t, 'de'));
+  if (p.sort === 'oft') return [...list].sort((a, b) => (hub.usage?.[b.id]?.n || 0) - (hub.usage?.[a.id]?.n || 0));
+  if (p.sort === 'eigen') return [...list].sort((a, b) => pos(a.id) - pos(b.id));
+  return list;
+}
 function tiles() {
-  const pins = hub.pins.map(id => allowed.find(a => a.id === id)).filter(Boolean);
-  $('#pins').innerHTML = pins.length ? pins.map(tile).join('') : '<div class="hint">Fahr über eine Kachel und klick auf die Stecknadel, um sie hier oben anzuheften.</div>';
-  $('#groups').innerHTML = Object.keys(GROUPS).map(g => { const l = allowed.filter(a => a.g === g); if (!l.length) return '';
-    return `<section class="sec" data-g="${esc(g)}"><div class="sec-h"><h2 style="--g:${gc(g)}"><i></i>${esc(g)}</h2><span>${esc(GROUPS[g].d)}</span></div><div class="tiles">${l.map(tile).join('')}</div></section>`; }).join('')
+  const p = P(), off = a => p.hidden.includes(a.id), all = allTiles(), cols = p.cols ? ` data-cols="${p.cols}" style="--cols:${p.cols}"` : '';
+  const pick = ids => ids.map(id => all.find(a => a.id === id)).filter(a => a && !off(a));
+  const pins = pick(hub.pins);
+  $('#pins').innerHTML = pins.length ? pins.map(a => tile(a)).join('') : '<div class="hint">Fahr über eine Kachel und klick auf die Stecknadel, um sie hier oben anzuheften.</div>';
+  const recent = pick(Object.entries(hub.usage || {}).sort((a, b) => b[1].t - a[1].t).map(x => x[0])).slice(0, 6);
+  $('#recent').innerHTML = recent.map(a => tile(a)).join(''); $('#recentSec').classList.toggle('off', !p.showRecent || !recent.length);
+  for (const id of ['#pins', '#recent']) { const el = $(id); if (p.cols) { el.dataset.cols = p.cols; el.style.setProperty('--cols', p.cols); } else delete el.dataset.cols; }
+  const inGroup = g => all.filter(a => a.g === g);
+  const section = (g, label, desc, color, l, fold) => `<section class="sec${fold ? ' foldable' : ''}${fold && p.closed.includes(g) ? ' closed' : ''}" data-g="${esc(g)}"><div class="sec-h"${fold ? ` role="button" tabindex="0" aria-expanded="${!p.closed.includes(g)}"` : ''}><h2 style="--g:${color}"><i></i>${esc(label)}</h2><span>${esc(desc)}</span></div><div class="tiles"${cols}>${l.map(a => tile(a, off(a))).join('')}</div></section>`;
+  $('#groups').innerHTML = (p.groupMode === 'eins'
+    ? (all.length ? section('*', 'Alle Kacheln', '', 'var(--acc)', sortTiles(groupList().flatMap(inGroup)), false) : '')
+    : groupList().map(g => { const l = inGroup(g); return l.length || (arranging && GROUPS[g]) ? section(g, WB.groupLabel(g), GROUPS[g]?.d || '', gc(g), sortTiles(l), p.foldable && !arranging) : ''; }).join(''))
     || '<div class="empty">Dir sind noch keine Seiten freigegeben. Frag den Admin.</div>';
+  $('#groups').classList.toggle('no-head', !p.groupHead);
+  for (const el of [$('#groups'), $('#pinSec'), $('#recentSec')]) { el.classList.toggle('no-desc', !p.tileDesc); el.classList.toggle('no-live', !p.tileLive); el.classList.toggle('no-gdesc', !p.groupDesc); }
+  filterTiles();
   live();
 }
 function setNotify(id, on) { hub.notify = { ...(hub.notify || {}), [id]: on }; Store.set('hub', hub); tiles(); loadToday(); }
@@ -202,8 +303,46 @@ document.addEventListener('click', e => { const mu = e.target.closest('[data-mut
     setNotify(id, false); undoToast(`${APPS.find(a => a.id === id).t}: Hinweise ausgeschaltet`, () => setNotify(id, true)); return; }
   const bl = e.target.closest('[data-bell]'); if (bl) { e.preventDefault(); e.stopPropagation(); const id = bl.dataset.bell;
     hub.notify = { ...(hub.notify || {}), [id]: !notifyOn(id) }; Store.set('hub', hub); WB.toast(`${APPS.find(a => a.id === id).t}: Hinweise ${notifyOn(id) ? 'an' : 'aus'}`); tiles(); loadToday(); return; }
-  const p = e.target.closest('[data-pin]'); if (!p) return; e.preventDefault(); e.stopPropagation();
-  const id = p.dataset.pin; hub.pins = hub.pins.includes(id) ? hub.pins.filter(x => x !== id) : [...hub.pins, id].slice(-8); Store.set('hub', hub); tiles(); });
+  const p = e.target.closest('[data-pin]'); if (p) { e.preventDefault(); e.stopPropagation();
+    const id = p.dataset.pin; hub.pins = hub.pins.includes(id) ? hub.pins.filter(x => x !== id) : [...hub.pins, id].slice(-12); Store.set('hub', hub); tiles(); return; }
+  const sh = e.target.closest('[data-shift]'); if (sh) { e.preventDefault(); e.stopPropagation(); const t = sh.closest('.tile'), box = t.parentElement, step = +sh.dataset.shift;
+    const others = [...box.children].filter(x => !x.classList.contains('off')), other = others[others.indexOf(t) + step]; if (!other) return;
+    box.insertBefore(t, step < 0 ? other : other.nextSibling); saveArrangement(box); return; }
+  const head = e.target.closest('.sec.foldable .sec-h'); if (head && !arranging) { const g = head.parentElement.dataset.g, c = P().closed; WB.setPrefs({ closed: c.includes(g) ? c.filter(x => x !== g) : [...c, g] }); return; }
+  const t = e.target.closest('a.tile'); if (t) { if (arranging) { e.preventDefault(); return; } used(t.dataset.id); }
+});
+document.addEventListener('keydown', e => { const h = e.target.closest?.('.sec.foldable .sec-h'); if (h && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); h.click(); } });
+// Nutzung merken (für „Zuletzt benutzt“ und „Meistgenutzt“)
+function used(id) { const u = hub.usage?.[id] || { n: 0 }; hub.usage = { ...(hub.usage || {}), [id]: { n: u.n + 1, t: Date.now() } }; Store.set('hub', hub); }
+
+// ---------- Kacheln anordnen (ziehen oder mit den Pfeilen) ----------
+function saveArrangement(box) {
+  if (box.id === 'pins') { const ids = [...box.querySelectorAll('.tile')].map(t => t.dataset.id); hub.pins = [...ids, ...hub.pins.filter(i => !ids.includes(i))]; Store.set('hub', hub); return tiles(); }
+  if (box.id === 'recent') return tiles();
+  const p = P(), apps = { ...p.apps }; let links = p.links;
+  const order = $$('#groups .tile').map(t => t.dataset.id);
+  if (p.groupMode !== 'eins') for (const sec of $$('#groups .sec')) for (const t of sec.querySelectorAll('.tile')) { const id = t.dataset.id, g = sec.dataset.g, a = APPS.find(x => x.id === id);
+    if (a) apps[id] = { ...(apps[id] || {}), g: g === a.g0 || g === LINKS ? '' : g }; else links = links.map(l => l.id === id ? { ...l, g: g === LINKS ? '' : g } : l); }
+  WB.setPrefs({ sort: 'eigen', tileOrder: [...order, ...p.tileOrder.filter(i => !order.includes(i))], apps, links });
+  clearTimeout(redraw); tileLook = lookOf(); tiles();
+}
+let dragged = null;
+document.addEventListener('dragstart', e => { const t = arranging && e.target.closest?.('.tile'); if (!t) return; dragged = t; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', t.dataset.id); setTimeout(() => t.classList.add('dragging'), 0); });
+document.addEventListener('dragover', e => { if (!dragged) return; const box = e.target.closest?.('.tiles'); if (!box) return;
+  const from = dragged.parentElement; if ((box.id === 'pins') !== (from.id === 'pins') || box.id === 'recent' || from.id === 'recent' && box !== from) return;
+  e.preventDefault(); const over = e.target.closest('.tile'); if (over === dragged) return;
+  if (!over) return void box.appendChild(dragged);
+  const r = over.getBoundingClientRect(), after = P().tiles === 'liste' ? e.clientY > r.top + r.height / 2 : e.clientX > r.left + r.width / 2; box.insertBefore(dragged, after ? over.nextSibling : over); });
+document.addEventListener('drop', e => { if (dragged) e.preventDefault(); });
+document.addEventListener('dragend', () => { if (!dragged) return; const box = dragged.parentElement; dragged.classList.remove('dragging'); dragged = null; saveArrangement(box); });
+function arrange(on) {
+  arranging = on; document.body.classList.toggle('arranging', on); $('.arrbar')?.remove(); tiles();
+  if (!on) return;
+  const bar = document.createElement('div'); bar.className = 'arrbar';
+  bar.innerHTML = '<span>Kacheln ziehen oder mit ‹ › verschieben</span><button class="primary sm">Fertig</button>'; document.body.appendChild(bar); bar.querySelector('button').onclick = () => arrange(false);
+  ($('#groups .tile:not(.off)') || $('#groups'))?.scrollIntoView({ block: 'center' });
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && arranging && !document.querySelector('dialog[open]')) arrange(false); });
 
 // ---------- Daten für „Heute“ und Live-Zeilen ----------
 let cache = {};
@@ -304,7 +443,7 @@ const PRODUCERS = {
   messenger: async () => { const [u, p] = await Promise.all([api('/api/msg/users').catch(() => []), get('messenger', { lastRead: {} })]); const n = u.filter(c => c.last && c.lastFrom === c.id && c.last > ((p.lastRead || {})[c.id] || 0));
     return n.length ? [{ text: n.length === 1 ? `Neue Nachricht von ${n[0].name}` : `${n.length} ungelesene Chats`, sub: 'Ende-zu-Ende-verschlüsselt', val: n.length }] : []; },
   wochenbericht: async (T, now) => { if (![1, 2].includes(now.getDay())) return []; const l = await api('/api/news/reports').catch(() => []); const cur = `${now.getFullYear()}-W${String(kw(now)).padStart(2, '0')}`;
-    return l[0] === cur ? [{ text: 'Neuer Wochenbericht', sub: 'News zu deinen Themen', val: 'neu' }] : []; },
+    return l[0] === cur ? [{ text: 'Neuer Wochenbericht', sub: 'Das Wichtigste der letzten Tage', val: 'neu' }] : []; },
   outfits: async (T, now) => [1, 2].includes(now.getDay()) ? [{ text: 'Neue Outfits der Woche', sub: '6 Looks in Schwarz-Weiß und Schwarz-Rot', val: 'neu' }] : [],
   pihole: async () => { const p = await api('/api/pihole').catch(() => null); if (!p || !p.configured) return []; return (p.warnings || []).slice(0, 3).map(w => ({ text: 'Pi-hole', sub: w, val: '!', bad: true })); },
   monitor: async () => { const m = await api('/api/monitor').catch(() => null); if (!m) return []; const out = [];
@@ -337,36 +476,42 @@ async function loadToday() {
   todayItems = items; drawToday(); live();
 }
 function drawToday() {
-  const items = todayItems, max = showAll ? 99 : 6;
-  $('#todayList').innerHTML = items.length ? items.slice(0, max).map(i => `<a class="ti" href="/apps/${i.id}" style="--g:${gc(i.g)}"><span class="ic" data-mute="${i.id}" title="Hinweise von ${esc(APPS.find(a => a.id === i.id).t)} ausschalten"><span class="ic-app">${icon(i.id, 16)}</span><span class="ic-off">${icon('belloff', 16)}</span></span><span class="tx">${esc(i.text)}<small>${esc(i.sub || '')}</small></span><span class="val ${i.bad ? 'bad' : ''}">${esc(String(i.val ?? ''))}</span></a>`).join('')
-      + (items.length > 6 ? `<button class="ghost sm" id="more" style="margin-top:4px">${showAll ? 'Weniger anzeigen' : `+ ${items.length - 6} weitere`}</button>` : '')
+  const p = P(), n = p.todayMax, items = p.todayOnlyBad ? todayItems.filter(i => i.bad) : todayItems, max = showAll ? 99 : n;
+  $('.hero .today').classList.toggle('compact', p.todayCompact); $('.hero .today').classList.toggle('noicons', !p.todayIcons);
+  $('#todayList').innerHTML = items.length ? items.slice(0, max).map(i => `<a class="ti" href="/apps/${i.id}" style="--g:${WB.appColor(APPS.find(a => a.id === i.id))}"><span class="ic" data-mute="${i.id}" title="Hinweise von ${esc(APPS.find(a => a.id === i.id).t)} ausschalten"><span class="ic-app">${icon(i.id, 16)}</span><span class="ic-off">${icon('belloff', 16)}</span></span><span class="tx">${esc(i.text)}<small>${esc(i.sub || '')}</small></span><span class="val ${i.bad ? 'bad' : ''}">${esc(String(i.val ?? ''))}</span></a>`).join('')
+      + (items.length > n ? `<button class="ghost sm" id="more" style="margin-top:4px">${showAll ? 'Weniger anzeigen' : `+ ${items.length - n} weitere`}</button>` : '')
     : `<div style="padding:18px 0"><div style="font:600 18px var(--f-display)">Alles erledigt.</div><p class="mute" style="font-size:13px;margin-top:6px">Nichts Fälliges, keine Warnungen. Welche Kacheln hier melden dürfen, stellst du mit der Glocke ein. Fahr über ein Symbol, um die Hinweise einer Kachel direkt hier auszuschalten.</p></div>`;
   const m = $('#more'); if (m) m.onclick = () => { showAll = !showAll; drawToday(); };
   $('#todayCount').textContent = items.length ? items.length : '';
 }
 function notifyDialog() {
   const l = allowed.filter(a => NOTIFY[a.id]);
-  $('#nfList').innerHTML = l.map(a => `<label class="nf" style="--g:${gc(a.g)}"><span class="ic">${icon(a.id, 15)}</span><span class="grow"><b>${esc(a.t)}</b><small>${esc(NOTIFY[a.id].l)}</small></span><input type="checkbox" data-nf="${a.id}" ${notifyOn(a.id) ? 'checked' : ''}></label>`).join('');
+  $('#nfList').innerHTML = l.map(a => `<label class="nf" style="--g:${WB.appColor(a)}"><span class="ic">${icon(a.id, 15)}</span><span class="grow"><b>${esc(a.t)}</b><small>${esc(NOTIFY[a.id].l)}</small></span><input type="checkbox" data-nf="${a.id}" ${notifyOn(a.id) ? 'checked' : ''}></label>`).join('');
   $('#nfDlg').showModal();
 }
 document.addEventListener('change', e => { const c = e.target.closest('[data-nf]'); if (!c) return; hub.notify = { ...(hub.notify || {}), [c.dataset.nf]: c.checked }; Store.set('hub', hub); tiles(); loadToday(); });
 
 // ---------- Cockpit ----------
 let ckCfg = null, ckUpdate = null, ckData = null, ckTimer = null, ckBusy = false;
-const ckWide = matchMedia('(min-width: 1280px)');
+// Seitenspalten ab 1280 px; bei größerer Schrift erst entsprechend später
+const ckWide = () => window.innerWidth >= 1280 * (+document.documentElement.style.zoom || 1);
+// Seitenspalten ohne Scrollen an die Bildschirmhöhe anpassen
+const ckFit = () => { if (document.body.classList.contains('ck-side')) for (const id of ['#ckL', '#ckR']) WB.Cockpit.fit($(id)); };
+const ckAdjust = () => { if (ckCfg && me.cockpit && document.body.classList.contains('ck-side') !== (ckCfg.on && ckCfg.left.length + ckCfg.right.length > 0 && ckWide())) ckBuild(); else ckFit(); };
+let ckFrame = 0; window.addEventListener('resize', () => { cancelAnimationFrame(ckFrame); ckFrame = requestAnimationFrame(ckAdjust); });
 function ckBuild() {
-  const on = me.cockpit && ckCfg.on && (ckCfg.left.length + ckCfg.right.length) > 0, side = on && ckWide.matches;
+  const on = me.cockpit && ckCfg.on && (ckCfg.left.length + ckCfg.right.length) > 0, side = on && ckWide();
   document.body.classList.toggle('ck-side', side);
   for (const id of ['#ckL', '#ckR', '#ckRow']) $(id).innerHTML = '';
   clearInterval(ckTimer); ckUpdate = null; if (!on) return;
   const targets = side ? [[$('#ckL'), ckCfg.left], [$('#ckR'), ckCfg.right]] : [[$('#ckRow'), [...ckCfg.left, ...ckCfg.right]]];
   ckUpdate = WB.Cockpit.mount(targets, { apps: me.apps });
   if (ckData) ckUpdate(ckData);
-  ckLoad(); ckTimer = setInterval(ckLoad, 5000);
+  ckFit(); ckLoad(); ckTimer = setInterval(ckLoad, P().ckEvery * 1000);
 }
 async function ckLoad() {
   if (document.hidden || ckBusy || !ckUpdate) return; ckBusy = true;
-  try { ckData = await api('/api/cockpit'); ckUpdate?.(ckData); }
+  try { ckData = await api('/api/cockpit'); ckUpdate?.(ckData); ckFit(); }
   catch (e) { if (/abgeschaltet/.test(e.message)) { me.cockpit = false; $('#ckBtn').classList.add('hide'); ckBuild(); } }
   finally { ckBusy = false; }
 }
@@ -374,9 +519,9 @@ async function ckInit() {
   if (!me.cockpit) return;
   let saved = null; try { saved = await api('/api/data/cockpit'); } catch {}
   ckCfg = WB.Cockpit.normalize(saved);
-  $('#ckBtn').classList.remove('hide'); $('#ckBtn').innerHTML = icon('cockpit', 18);
+  $('#ckBtn').classList.remove('hide'); $('#ckBtn').innerHTML = icon('cockpit', 18); layout();
   $('#ckBtn').onclick = () => { WB.Cockpit.settings($('#ckSet'), ckCfg, c => { Store.set('cockpit', c); ckBuild(); }); $('#ckDlg').showModal(); };
-  ckWide.addEventListener('change', ckBuild); document.addEventListener('visibilitychange', ckLoad);
+  document.addEventListener('visibilitychange', ckLoad);
   ckBuild();
 }
 
@@ -389,12 +534,47 @@ function askName() {
   d.showModal(); $('#nameIn').select();
 }
 
-// ---------- Suche ----------
-$('#q').oninput = e => { const q = e.target.value.trim().toLowerCase(); $('#pinSec').classList.toggle('hidden', !!q);
+// ---------- Suche (findet auch ausgeblendete Kacheln) ----------
+function filterTiles() { const q = $('#q').value.trim().toLowerCase(); for (const s of ['#pinSec', '#recentSec']) $(s).classList.toggle('hidden', !!q); $('#groups').classList.toggle('searching', !!q);
   $$('#groups .tile').forEach(t => t.classList.toggle('hidden', !!q && !q.split(/\s+/).every(w => t.dataset.s.includes(w))));
-  $$('#groups .sec').forEach(s => s.classList.toggle('hidden', !s.querySelector('.tile:not(.hidden)'))); };
-$('#q').onkeydown = e => { if (e.key === 'Enter') { const t = $('#groups .tile:not(.hidden)'); if (t) location.href = t.href; } if (e.key === 'Escape') { e.target.value = ''; e.target.oninput({ target: e.target }); e.target.blur(); } };
-document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== $('#q')) { e.preventDefault(); $('#q').focus(); } });
+  $$('#groups .sec').forEach(s => s.classList.toggle('hidden', !s.querySelector(q ? '.tile:not(.hidden)' : '.tile:not(.off)'))); }
+$('#q').oninput = filterTiles;
+$('#q').onkeydown = e => { if (e.key === 'Enter') { const t = $('#groups .tile:not(.hidden)' + (e.target.value.trim() ? '' : ':not(.off)')); if (!t) return; used(t.dataset.id); t.target ? window.open(t.href, '_blank', 'noopener,noreferrer') : location.href = t.href; } if (e.key === 'Escape') { e.target.value = ''; filterTiles(); e.target.blur(); } };
+document.addEventListener('keydown', e => { if (e.key === '/' && P().hotkeys && !document.querySelector('dialog[open]') && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); $('#q').focus(); } });
+// Zifferntasten öffnen die angehefteten Kacheln
+document.addEventListener('keydown', e => { if (!P().numberKeys || !/^[1-9]$/.test(e.key) || e.ctrlKey || e.altKey || e.metaKey || arranging || document.querySelector('dialog[open]') || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  const t = $$('#pins .tile')[+e.key - 1]; if (t) { e.preventDefault(); t.click(); } });
+
+// ---------- Persönliche Einstellungen anwenden ----------
+const FR = { uhr: '1.05fr', heute: '1.25fr', wetter: '.9fr' }, HEROSEL = { uhr: '.clock-card', heute: '.hero .today', wetter: '.hero .wx' };
+function layout() { const p = P(), on = { uhr: p.showClock, heute: p.showToday, wetter: p.showWeather }, hero = $('#hero');
+  const cards = p.heroOrder.map(k => { const el = $(HEROSEL[k]); el.classList.toggle('off', !on[k]); return el; }); if (cards.some((el, i) => hero.children[i] !== el)) cards.forEach(el => hero.appendChild(el));
+  const vis = p.heroOrder.filter(k => on[k]); hero.dataset.n = vis.length; hero.dataset.stack = p.heroLayout === 'gestapelt' ? 1 : 0;
+  hero.style.removeProperty('--herocols'); if (vis.length === 3 && p.heroOrder.join() !== 'uhr,heute,wetter') hero.style.setProperty('--herocols', vis.map(k => FR[k]).join(' '));
+  $('.clock-card').classList.toggle('mitte', p.clockAlign === 'mitte');
+  // Reihenfolge der Abschnitte
+  const wrap = $('main.wrap'), foot = $('.foot'), ids = { uebersicht: '#hero', cockpit: '#ckRow', angeheftet: '#pinSec', zuletzt: '#recentSec', kacheln: '#groups' };
+  const want = p.sections.map(s => $(ids[s])); if (want.some((el, i) => wrap.children[i] !== el)) want.forEach(el => wrap.insertBefore(el, foot));
+  $('#pinSec').classList.toggle('off', !p.showPins); foot.classList.toggle('off', !p.showFoot);
+  // Kopfzeile
+  $('#brandName').textContent = p.brand.trim() || 'WERKBANK'; $('.brand').classList.toggle('off', !p.showBrand);
+  $('.search').classList.toggle('off', !p.showSearch); $('.topbar .in').classList.toggle('nosearch', !p.showSearch);
+  $('#phase').classList.toggle('off', !p.showPhase); $('#theme').classList.toggle('off', !p.showThemeBtn); $('#ckBtn').classList.toggle('ck-off', !p.showCkBtn);
+  $('.topbar .row').classList.toggle('nonames', !p.showNames); }
+let ready = false, redraw = 0, tileLook = '', wxLook = '', ckEvery = 0;
+// Kacheln nur neu aufbauen, wenn sich an ihnen etwas ändert, und nicht bei jedem Reglerschritt
+const lookOf = () => { const p = P(); return JSON.stringify([p.hidden, p.order, p.closed, p.cols, p.tileDesc, p.tileLive, p.tileButtons, p.groupHead, p.groupDesc, p.groupMode, p.sort, p.tileOrder, p.foldable, p.showRecent, p.newTab, p.colors, p.groups, p.groupNames, p.ownGroups, p.apps, p.links, p.accent, p.myBg, p.cBg,
+  p.todayMax, p.todayCompact, p.todayIcons, p.todayOnlyBad, document.documentElement.dataset.phase]); };
+const wxOf = () => { const p = P(); return [p.tempUnit, p.windUnit, p.fcDays, p.wxDetails].join(); };
+function restyle() { layout(); if (!ready) return; tick(); clearTimeout(redraw); redraw = setTimeout(() => { setThemeIcon(); drawArc();
+  if (lookOf() !== tileLook) { tileLook = lookOf(); tiles(); drawToday(); }
+  if (wxOf() !== wxLook) { wxLook = wxOf(); weather(); }
+  if (ckEvery !== P().ckEvery) { ckEvery = P().ckEvery; if (ckCfg) ckBuild(); }
+  ckAdjust(); }, 80); }
+document.addEventListener('wb-prefs', restyle); document.addEventListener('wb-theme', restyle);
+document.addEventListener('wb-cockpit', e => { ckCfg = e.detail; ckBuild(); });
+window.WBHome = { notify: () => notifyDialog(), city: () => openCity(), arrange: () => arrange(true) };
+layout();
 
 (async () => {
   me = await WB.me(); allowed = APPS.filter(a => me.apps.includes(a.id));
@@ -403,7 +583,8 @@ document.addEventListener('keydown', e => { if (e.key === '/' && document.active
   setThemeIcon(); tick(); setInterval(tick, 1000); drawArc();
   hub = Object.assign(hub, await Store.get('hub', hub)); if (!Array.isArray(hub.pins)) hub.pins = [];
   if (!hub.pins.length && !hub.pinsInit) { hub.pins = ['aufgaben', 'berichtsheft', 'schule', 'outfits'].filter(has); hub.pinsInit = true; Store.set('hub', hub); }
-  tiles(); loadToday(); weather(); ckInit();
+  ready = true; tileLook = lookOf(); wxLook = wxOf(); ckEvery = P().ckEvery; tiles(); loadToday(); weather(); ckInit();
+  if (P().focusSearch) $('#q').focus();
   if (me.askName) askName();
   setInterval(weather, 15 * 60e3); setInterval(loadToday, 60e3); document.addEventListener('visibilitychange', () => { if (!document.hidden) loadToday(); });
 })();

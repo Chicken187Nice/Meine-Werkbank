@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Finanzen</title>
 <style>
   .month-nav { display:flex; align-items:center; gap:8px; }
@@ -12,7 +12,7 @@
   .chart .bars { display:flex; gap:3px; align-items:end; height:100%; width:100%; justify-content:center; }
   .chart .bars i { width:40%; max-width:18px; border-radius:4px 4px 0 0; display:block; min-height:2px; }
   /* Ausgaben im Diagramm fest orange: --acc ist auf dieser Seite grün (Bereich „Alltag“) */
-  :root { --expense: #ff9b54; } :root[data-phase="mittag"] { --expense: #e2561f; }
+  :root { --expense: #ff9b54; } :root[data-light] { --expense: #e2561f; }
   .chart .in { background: var(--good); } .chart .out { background: var(--expense); }
   .chart .lbl { font: 500 11px var(--f-mono); color: var(--mute); }
   .tx-amt { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
 <title>Protokoll</title>
 <style>
   .bars { display:flex; align-items:end; gap:2px; height:120px; border-bottom:1px solid var(--line2); }
@@ -37,7 +37,7 @@
   <section id="logins" class="hide" style="margin-top:14px">
     <div class="filters"><select id="lf" aria-label="Ergebnis"><option value="">Alle Versuche</option><option value="ok">Nur erfolgreiche</option><option value="fehler">Nur fehlgeschlagene</option><option value="offen">Passwort richtig, Code fehlte</option></select></div>
     <div class="g3" id="lkpi" style="margin-top:14px"></div>
-    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Aktuell gesperrt</span></div><div class="tw" id="locks"></div></div>
+    <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Aktuell gesperrt</span><button class="sm hide" id="unlockAll">Alle aufheben</button></div><div class="tw" id="locks"></div></div>
     <div class="panel" style="margin-top:14px"><div class="panel-h"><span class="label">Anmeldeversuche (höchstens 500)</span></div><div class="tw" id="lrows"></div></div>
     <p class="mute" style="font-size:12px;margin-top:10px">Der Name ist das, was eingegeben wurde. Er beweist nicht, wer dahintersteckt. Passwörter und Codes werden nie gespeichert.</p>
   </section>
@@ -75,7 +75,9 @@ async function traffic(mine) {
 async function logins(mine) {
   const [d, s] = await Promise.all([api('/api/protokoll/anmeldungen?filter=' + $('#lf').value), api('/api/protokoll/sperren')]); if (mine !== seq) return;
   const KIND = { ipacct: 'diese IP für diesen Namen', ip: 'diese IP für alle Konten', acct: 'Konto, nur für unbekannte Geräte', reset: 'Passwort zurücksetzen', jf: 'Jellyfin verbinden' };
-  put('#locks', table(['Gesperrt bis', 'IP', 'Name', 'Gilt für', 'Stufe'], s.map(x => `<tr><td class="mono bad">✕ ${when(x.until)}</td><td class="mono">${esc(x.ip || '–')}</td><td>${esc(x.name || '–')}</td><td>${esc(KIND[x.kind] || x.kind)}</td><td class="mono">${x.level}</td></tr>`), 'Gerade ist nichts gesperrt'));
+  put('#locks', table(['Gesperrt bis', 'Name', 'IP', 'Gilt für', 'Stufe', ''], s.map(x => `<tr><td class="mono bad">✕ ${when(x.until)}</td><td>${esc(x.name || '–')}</td><td class="mono">${esc(x.ip || '–')}</td><td>${esc(KIND[x.kind] || x.kind)}</td><td class="mono">${x.level}</td>
+    <td><button class="sm primary" data-unlock="${esc(x.id)}" data-who="${esc(x.name || x.ip)}">Aufheben</button></td></tr>`), 'Gerade ist nichts gesperrt'));
+  $('#unlockAll').classList.toggle('hide', s.length < 2); if (s.length < 2) disarm();
   put('#lkpi', stat('Angemeldet', n(d.sum.ok), 'in den letzten 24 Stunden', 'good') + stat('Fehlgeschlagen', n(d.sum.failed), 'in den letzten 24 Stunden', d.sum.failed ? 'bad' : '') + stat('Adressen mit Fehlern', n(d.sum.failedIps), 'verschiedene IPs, 24 Stunden'));
   const mark = { ok: ['good', '✓'], fehler: ['bad', '✕'], offen: ['', '…'] };
   put('#lrows', table(['Zeit', 'Eingegebener Name', 'Ergebnis', 'IP', 'Herkunft', 'Browser'], d.entries.map(e => `<tr><td class="mono">${when(e.t)}</td>
@@ -83,6 +85,15 @@ async function logins(mine) {
     <td class="${mark[e.kind][0]}">${mark[e.kind][1]} ${esc(RES[e.r] || e.r)}${e.neu ? ' <span class="chip">neues Gerät</span>' : ''}</td>
     <td class="mono">${esc(e.ip)}</td><td>${esc(SRC[e.s] ?? e.s)}</td><td class="ua" title="${esc(e.ua)}">${esc(e.ua || '–')}</td></tr>`), 'Noch keine Anmeldeversuche'));
 }
+// Sperren aufheben
+let armed = 0;
+const disarm = () => { clearTimeout(armed); armed = 0; $('#unlockAll').textContent = 'Alle aufheben'; };
+async function unlock(body, done) {
+  try { await api('/api/protokoll/sperren/aufheben', { method: 'POST', body }); toast(done); } catch (e) { toast(e.message); }
+  load();
+}
+$('#locks').addEventListener('click', e => { const b = e.target.closest('[data-unlock]'); if (!b || b.disabled) return; b.disabled = true; unlock({ id: b.dataset.unlock }, `Sperre für ${b.dataset.who} aufgehoben`); });
+$('#unlockAll').onclick = () => { if (!armed) { $('#unlockAll').textContent = 'Wirklich alle?'; armed = setTimeout(disarm, 4000); return; } disarm(); unlock({ alle: true }, 'Alle Sperren aufgehoben'); };
 async function load() {
   const mine = ++seq;
   try { await (tab === 'traffic' ? traffic(mine) : logins(mine)); $('#upd').textContent = 'Stand ' + new Date().toLocaleTimeString('de-DE'); }

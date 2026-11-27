@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/core.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/passwort-hilfe.js"></script>
 <title>Verwaltung</title>
 <style>
   .u { display:grid; grid-template-columns: 44px 1.3fr 2fr auto; gap: 14px; align-items:center; padding: 14px 4px; border-bottom: 1px solid var(--line); }
@@ -17,7 +17,7 @@
   .allrow input { width: 20px; height: 20px; } .allrow:has(input:checked) { border-color: var(--acc); background: color-mix(in srgb, var(--acc) 12%, var(--bg)); }
   .log { font: 12.5px/1.5 var(--f-mono); } .log .it { gap: 14px; padding: 7px 2px; }
   .log .ev { min-width: 170px; } .ev.bad { color: var(--bad); }
-  dialog { width: min(760px, 94vw); max-height: 92vh; }
+  dialog { width: min(760px, calc(94vw / var(--wb-z, 1))); max-height: calc(92vh / var(--wb-z, 1)); }
   @media (max-width: 800px) { .u { grid-template-columns: 44px 1fr; } .u > :nth-child(n+3) { grid-column: 1 / -1; } }
 </style>
 </head><body>
@@ -31,8 +31,10 @@
 </main>
 <dialog id="dlg"><form method="dialog" class="stack" id="f">
   <div class="row between"><h3 id="dT">Nutzer</h3><span class="chip" id="dBadge"></span></div>
+  <div class="sunk hide" id="dState" style="font-size:13px;line-height:1.55"></div>
   <div class="fields"><label class="field"><span>Nutzername</span><input name="uname" autocomplete="off" autocapitalize="off" spellcheck="false" pattern="[a-zA-Z0-9._\-]{2,32}"></label>
-    <label class="field"><span id="pwL">Startpasswort</span><div class="row" style="flex-wrap:nowrap"><input name="pass" autocomplete="new-password" spellcheck="false" class="mono"><button type="button" class="sm" id="genPw" title="Sicheres Passwort erzeugen">⟳</button></div></label></div>
+    <label class="field"><span id="pwL">Startpasswort</span><div class="row" style="flex-wrap:nowrap"><input name="pass" autocomplete="new-password" spellcheck="false" class="mono"><button type="button" class="sm" id="genPw" title="Sicheres Passwort erzeugen">⟳</button></div><small class="faint" style="font-size:12px">Mindestens 10 Zeichen, unter 16 drei Zeichenarten. ⟳ erzeugt ein passendes.</small></label></div>
+  <div id="dPwHelp"></div>
   <div><div class="row between" style="margin-bottom:8px"><span class="label">Zugriff auf Seiten</span><div class="row" style="gap:4px"><button type="button" class="chip" data-pre="none">Keine</button><button type="button" class="chip" data-pre="alltag">Alltag</button><button type="button" class="chip" data-pre="lernen">Lernen</button><button type="button" class="chip" data-pre="chat">Nur Messenger</button></div></div>
     <label class="allrow"><input type="checkbox" id="allBox"><span class="grow"><b>Alles freigeben</b><br><span class="faint" style="font-size:12px" id="allHint"></span></span></label>
     <div class="appgrid" id="appgrid"></div>
@@ -48,8 +50,15 @@
   <div class="row sunk hide" id="dName"><span class="grow" style="font-size:13px">Selbst gewählter Name: <b id="dNameV"></b></span><button type="button" class="sm" data-act="name">Entfernen</button></div>
   <label class="field"><span>Notiz (nur für Admins sichtbar)</span><input name="note" placeholder="z. B. Bruder, Laptop im Wohnzimmer"></label>
   <div class="row" id="dActions"></div>
-  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div>
+  <div class="notice hide" id="dMsg" role="alert"></div>
+  <div class="row end"><button type="button" class="ghost" id="dCancel">Abbrechen</button><button value="ok" class="primary" id="dSave">Speichern</button></div>
 </form></dialog>
+<dialog id="pwDlg"><div class="stack"><h3>Neues Passwort gespeichert</h3>
+  <p class="mute" style="font-size:14px">Für <b id="pwWho"></b>. Es wird nur jetzt angezeigt. Gib es sicher weiter. Groß- und Kleinschreibung zählt; ein mit ⟳ erzeugtes darf auch ohne Bindestriche eingegeben werden.</p>
+  <div class="sunk mono" id="pwShow" style="font-size:18px;font-weight:600;user-select:all;overflow-wrap:anywhere"></div>
+  <p class="faint" style="font-size:12px" id="pwInfo"></p>
+  <div style="font-size:13px"><b>So geht es weiter</b><ol id="pwSteps" style="margin:6px 0 0;padding-left:20px;line-height:1.6"></ol></div>
+  <div class="row end"><button type="button" id="pwCopy">Kopieren</button><button type="button" class="primary" id="pwOk">Fertig</button></div></div></dialog>
 <script>
 WB.header('admin');
 const { $, $$, esc, api, toast, APPS } = WB;
@@ -66,7 +75,7 @@ function render() {
   $('#kpis').innerHTML = `<div class="panel stat"><div class="label">Nutzer</div><div class="v">${U.length}</div></div><div class="panel stat"><div class="label">Aktiv</div><div class="v good">${act}</div></div>
     <div class="panel stat"><div class="label">Offene Sitzungen</div><div class="v">${on}</div></div><div class="panel stat"><div class="label">Mit 2FA</div><div class="v acc">${U.filter(u => u.totp).length}</div></div>`;
   $('#list').innerHTML = U.map(u => `<div class="u"><span class="av ${u.owner ? 'owner' : ''}">${esc(u.name[0].toUpperCase())}</span>
-    <div><b>${esc(u.name)}</b> ${u.display ? `<span class="mute" style="font-size:13px">nennt sich „${esc(u.display)}“</span>` : ''} ${u.owner ? '<span class="chip on">Owner</span>' : u.admin ? '<span class="chip on">Admin</span>' : ''} ${u.setup2fa ? '<span class="chip warn">2FA fehlt noch</span>' : u.require2fa ? '<span class="chip">2FA Pflicht</span>' : ''} ${!u.active ? '<span class="chip bad">deaktiviert</span>' : ''} ${u.mustChange ? '<span class="chip warn">PW-Wechsel offen</span>' : ''}
+    <div><b>${esc(u.name)}</b> ${u.display ? `<span class="mute" style="font-size:13px">nennt sich „${esc(u.display)}“</span>` : ''} ${u.owner ? '<span class="chip on">Owner</span>' : u.admin ? '<span class="chip on">Admin</span>' : ''} ${u.setup2fa ? '<span class="chip warn">2FA fehlt noch</span>' : u.require2fa ? '<span class="chip">2FA Pflicht</span>' : ''} ${!u.active ? '<span class="chip bad">deaktiviert</span>' : ''} ${u.lockedUntil ? `<span class="chip bad">gesperrt bis ${time(u.lockedUntil)}</span>` : ''} ${u.mustChange ? '<span class="chip warn">PW-Wechsel offen</span>' : ''}
       <div class="faint" style="font-size:12px">${u.lastLogin ? 'zuletzt ' + new Date(u.lastLogin).toLocaleString('de-DE') : 'noch nie angemeldet'} · ${u.sessions} Sitzung(en)${u.totp ? ' · 2FA' : ''}${u.expires ? ' · bis ' + new Date(u.expires).toLocaleDateString('de-DE') : ''}${u.note ? ' · ' + esc(u.note) : ''}</div></div>
     <div class="apps">${u.owner ? '<span class="chip on">alle Seiten</span>' : u.apps.length ? u.apps.map(a => `<span class="chip">${esc(appName(a))}</span>`).join('') : '<span class="faint" style="font-size:12px">keine Seiten</span>'}</div>
     <div class="row"><button class="sm" data-edit="${u.id}">Bearbeiten</button></div></div>`).join('');
@@ -96,30 +105,82 @@ function open(u) {
   f.active.disabled = f.admin.disabled = !!u?.owner || u?.id === me.id; $('#adminRow').classList.toggle('hide', !me.owner);
   f.expires.disabled = !!u?.owner;
   $('#dActions').innerHTML = u ? `<button type="button" class="sm" data-act="logout">Überall abmelden</button>${u.totp ? '<button type="button" class="sm" data-act="2fa">2FA zurücksetzen</button>' : ''}${u.owner || u.id === me.id ? '' : '<span class="grow"></span><button type="button" class="sm danger" data-act="del">Nutzer löschen</button>'}` : '';
+  filled = !u; disarm(); state(u); pwHelp.draw();
   $('#dlg').showModal();
 }
 $('#add').onclick = () => open();
-$('#genPw').onclick = () => { $('#f').pass.value = genPw(); };
+const pwHelp = WBPass.attach($('#f').pass, { show: false, neu: true, after: $('#dPwHelp') });
+const when = t => t ? new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' Uhr' : null;
+const time = t => new Date(t).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + ' Uhr';
+// Was passiert, wenn sich diese Person jetzt anmeldet?
+function nextLogin(u) {
+  if (!u.active) return 'Anmelden nicht möglich, der Zugang ist deaktiviert.';
+  if (u.expires && new Date().toISOString().slice(0, 10) > u.expires) return 'Anmelden nicht möglich, der Zugang ist abgelaufen.';
+  const s = ['Passwort' + (u.totp ? ' und Code aus der App' : '')]; if (u.mustChange) s.push('eigenes Passwort festlegen'); if (u.setup2fa) s.push('Zwei-Faktor einrichten');
+  return s.join(', dann ') + (u.mustChange || u.setup2fa ? ', dann sind die Seiten frei.' : ', fertig.');
+}
+function state(u) {
+  const box = $('#dState'); box.classList.toggle('hide', !u); if (!u) return;
+  const line = (k, v) => `<div><span class="faint">${k}:</span> ${v}</div>`;
+  box.innerHTML = line('Letzte Anmeldung', when(u.lastLogin) || 'noch nie')
+    + line('Passwort zuletzt gesetzt', u.pwAt ? when(u.pwAt) + (u.pwBy === u.name ? ' selbst' : ' von ' + esc(u.pwBy)) : 'Zeitpunkt nicht aufgezeichnet')
+    + line('Zwei-Faktor', u.totp ? 'aktiv' : u.require2fa ? '<span class="warn">Pflicht, noch nicht eingerichtet</span>' : 'nicht eingerichtet, freiwillig')
+    + line('Nächste Anmeldung', esc(nextLogin(u)))
+    + (u.lockedUntil > Date.now() ? `<div class="row" style="margin-top:6px"><span class="grow bad"><b>Gesperrt bis ${time(u.lockedUntil)}</b> wegen zu vieler Fehlversuche. Auch das richtige Passwort wird abgelehnt.</span><button type="button" class="sm" data-act="entsperren">Sperre aufheben</button></div>` : line('Sperre', 'keine'));
+}
+// Meldungen stehen im Fenster selbst: ein Hinweis am Seitenrand läge unsichtbar dahinter
+let armed = false, filled = false, busy = false;
+function note(text, kind = '') { const n = $('#dMsg'); n.textContent = text; n.className = 'notice ' + kind + (text ? '' : ' hide'); if (text) n.scrollIntoView({ block: 'nearest' }); }
+const disarm = () => { armed = false; $('#dSave').textContent = 'Speichern'; note(''); };
+// Neues Passwort für jemand anderen: „muss eigenes Passwort setzen“ wird mit angehakt (lässt sich abwählen)
+function pwTyped() { const f = $('#f'), has = !!f.pass.value; disarm(); pwHelp.draw();
+  if (edit && edit.id !== me.id && has !== filled) f.mustChange.checked = has ? true : !!edit.mustChange; filled = has; }
+$('#f').pass.addEventListener('input', pwTyped);
+$('#genPw').onclick = () => { $('#f').pass.value = genPw(); pwTyped(); };
+$('#dCancel').onclick = () => $('#dlg').close('cancel');
 $('#f').addEventListener('click', async e => { const p = e.target.closest('[data-pre]'); if (p) { const v = p.dataset.pre; $$('#appgrid input').forEach(i => i.checked = v === 'all' ? true : v === 'none' ? false : PRE[v].includes(i.value)); syncAll(); }
   const a = e.target.closest('[data-act]'); if (!a || !edit) return;
-  try { if (a.dataset.act === 'logout') { await api(`/api/admin/users/${edit.id}/logout`, { method: 'POST' }); toast(edit.name + ' wurde überall abgemeldet'); }
-    if (a.dataset.act === 'name') { await api('/api/admin/users/' + edit.id, { method: 'PUT', body: { display: '' } }); $('#dName').classList.add('hide'); toast('Name entfernt'); }
-    if (a.dataset.act === '2fa' && confirm('2FA für ' + edit.name + ' zurücksetzen?')) { await api(`/api/admin/users/${edit.id}/reset-2fa`, { method: 'POST' }); toast('2FA zurückgesetzt'); }
-    if (a.dataset.act === 'del' && confirm(`${edit.name} und alle Daten (inkl. Nachrichten) endgültig löschen? Das kann nicht rückgängig gemacht werden.`)) { await api(`/api/admin/users/${edit.id}`, { method: 'DELETE' }); $('#dlg').close('x'); toast('Gelöscht'); }
-    load(); } catch (err) { toast(err.message); } });
-$('#dlg').addEventListener('close', async () => { if ($('#dlg').returnValue !== 'ok') return; const f = $('#f');
+  try { if (a.dataset.act === 'entsperren') { await api(`/api/admin/users/${edit.id}/entsperren`, { method: 'POST' }); note('Sperre aufgehoben. ' + edit.name + ' kann sich sofort wieder anmelden.', 'ok'); }
+    if (a.dataset.act === 'logout') { await api(`/api/admin/users/${edit.id}/logout`, { method: 'POST' }); note(edit.name + ' wurde überall abgemeldet.', 'ok'); }
+    if (a.dataset.act === 'name') { await api('/api/admin/users/' + edit.id, { method: 'PUT', body: { display: '' } }); $('#dName').classList.add('hide'); note('Name entfernt.', 'ok'); }
+    if (a.dataset.act === '2fa' && confirm('2FA für ' + edit.name + ' zurücksetzen?')) { await api(`/api/admin/users/${edit.id}/reset-2fa`, { method: 'POST' }); note('2FA wurde zurückgesetzt. Bei Pflicht richtet ' + edit.name + ' sie beim nächsten Anmelden neu ein.', 'ok'); a.remove(); }
+    if (a.dataset.act === 'del' && confirm(`${edit.name} und alle Daten (inkl. Nachrichten) endgültig löschen? Das kann nicht rückgängig gemacht werden.`)) { await api(`/api/admin/users/${edit.id}`, { method: 'DELETE' }); $('#dlg').close('x'); toast(edit.name + ' und alle zugehörigen Daten wurden gelöscht.'); }
+    await load(); const cur = U.find(u => u.id === edit?.id); if (cur && $('#dlg').open) { edit = cur; state(cur); } } catch (err) { note(err.message + (err.hint ? ' ' + err.hint : '')); } });
+// Speichern (Knopf oder Enter). Das Fenster schließt erst, wenn der Server die Änderung angenommen hat.
+$('#f').addEventListener('submit', async e => { e.preventDefault(); if (busy) return; const f = $('#f'), pw = f.pass.value;
   const body = { apps: $$('#appgrid input:checked').map(i => i.value), expires: f.expires.value || null, sessionHours: +f.sessionHours.value, active: f.active.checked, mustChange: f.mustChange.checked, note: f.note.value }; if (!f.cockpit.disabled) body.cockpit = f.cockpit.checked;
-  if (me.owner) body.admin = f.admin.checked; if (!f.require2fa.disabled) body.require2fa = f.require2fa.checked; if (f.pass.value) body.pass = f.pass.value;
-  const pw = f.pass.value;
-  try { if (edit) { if (pw && !confirm('Passwort zurücksetzen? Der Messenger-Tresor dieses Nutzers wird dabei gelöscht, alte Nachrichten sind für ihn dann nicht mehr lesbar.')) return; await api('/api/admin/users/' + edit.id, { method: 'PUT', body }); toast('Gespeichert'); }
-    else { body.name = f.uname.value; await api('/api/admin/users', { method: 'POST', body }); }
-    if (pw) { try { await navigator.clipboard.writeText(pw); toast('Gespeichert. Passwort ist in der Zwischenablage, gib es sicher weiter.'); } catch { alert('Passwort für die Weitergabe: ' + pw); } }
-    load(); } catch (err) { toast(err.message); $('#dlg').showModal(); } });
+  if (me.owner) body.admin = f.admin.checked; if (!f.require2fa.disabled) body.require2fa = f.require2fa.checked; if (pw) body.pass = pw;
+  if (edit && pw && !armed) { armed = true; $('#dSave').textContent = 'Passwort zurücksetzen und speichern';
+    return note('Noch nicht gespeichert. Beim Zurücksetzen wird der Messenger-Tresor dieses Nutzers gelöscht, alte Nachrichten sind dann nicht mehr lesbar. Zum Bestätigen noch einmal auf den Knopf unten klicken.', 'warn'); }
+  const who = edit ? edit.name : f.uname.value.trim().toLowerCase(), existing = !!edit;
+  busy = true; $('#dSave').disabled = true; $('#dSave').textContent = 'Speichere …';
+  try { if (edit) await api('/api/admin/users/' + edit.id, { method: 'PUT', body });
+    else await api('/api/admin/users', { method: 'POST', body: { ...body, name: f.uname.value } });
+    const self = existing && pw && edit.id === me.id; // das eigene Passwort beendet auch diese Sitzung
+    $('#dlg').close('ok'); if (pw) showPw(who, pw, body.mustChange, existing, edit); else toast(existing ? `Gespeichert. Die Änderungen an ${who} gelten ab sofort.` : `${who} wurde angelegt.`);
+    if (self) $('#pwDlg').addEventListener('close', () => location.href = '/login', { once: true }); else load(); }
+  catch (err) { disarm(); note('Nicht gespeichert: ' + err.message + (err.hint ? ' ' + err.hint : '')); }
+  finally { busy = false; $('#dSave').disabled = false; if (!armed) $('#dSave').textContent = 'Speichern'; } });
+async function copyPw(text) { try { await navigator.clipboard.writeText(text); return true; } catch { return false; } }
+async function showPw(who, pw, must, existing, before) {
+  $('#pwWho').textContent = who; $('#pwShow').textContent = pw;
+  const f = $('#f'), has2fa = !!before?.totp, need2fa = f.require2fa.checked && !has2fa;
+  $('#pwSteps').replaceChildren(...[`${who} öffnet ${location.origin} und meldet sich mit dem Namen „${who}“ und diesem Passwort an.`, has2fa && 'Danach den Code aus der Authenticator-App eingeben. Ist das Handy weg, setz hier die 2FA zurück.',
+    must && 'Eigenes Passwort festlegen. Bei „Aktuelles Passwort“ gehört das von oben hinein.', need2fa && 'Zwei-Faktor einrichten. Zur Bestätigung gilt dann das neue, eigene Passwort.'].filter(Boolean).map(t => { const li = document.createElement('li'); li.textContent = t; return li; }));
+  $('#pwDlg').showModal();
+  const info = copied => { $('#pwInfo').textContent = [copied ? 'Ist in der Zwischenablage.' : 'Kopieren ging nicht automatisch: markiere das Passwort und kopiere es von Hand.', must ? 'Beim nächsten Anmelden muss ein eigenes Passwort festgelegt werden.' : '', existing ? 'Sperren wegen Fehlversuchen sind aufgehoben.' : ''].filter(Boolean).join(' '); };
+  $('#pwCopy').onclick = async () => info(await copyPw(pw)); info(await copyPw(pw));
+}
+$('#pwOk').onclick = () => $('#pwDlg').close();
+$('#pwDlg').addEventListener('close', () => { $('#pwShow').textContent = ''; $('#pwCopy').onclick = null; });
 document.addEventListener('click', e => { const b = e.target.closest('[data-edit]'); if (b) open(U.find(u => u.id === b.dataset.edit));
   const l = e.target.closest('[data-lf]'); if (l) { lf = l.dataset.lf; $$('[data-lf]').forEach(x => x.classList.toggle('on', x === l)); log(); } });
 $('#tabs').onclick = e => { const b = e.target.closest('button'); if (!b) return; $$('#tabs button').forEach(x => x.classList.toggle('on', x === b)); ['users','log'].forEach(t => $('#t-' + t).classList.toggle('hide', t !== b.dataset.t)); if (b.dataset.t === 'log') log(); };
+const EVENTS = { login: 'Angemeldet', 'login-fehler': 'Anmeldung fehlgeschlagen: Name oder Passwort falsch', '2fa-fehler': 'Anmeldung fehlgeschlagen: 2FA-Code falsch', 'login-gesperrt': 'Abgelehnt, weil gerade gesperrt', 'login-deaktiviert': 'Abgelehnt: Zugang deaktiviert', 'login-abgelaufen': 'Abgelehnt: Zugang abgelaufen', 'login-neues-gerät': 'Anmeldung von neuem Gerät', logout: 'Abgemeldet', 'logout-überall': 'Auf allen Geräten abgemeldet', 'admin-abgemeldet': 'Von Admin abgemeldet',
+  'sperre-ipacct': 'Gesperrt: zu viele Fehlversuche von dieser Adresse', 'sperre-acct': 'Konto gesperrt: Fehlversuche von mehreren Stellen', 'sperre-ip': 'Adresse gesperrt: zu viele Fehlversuche', 'sperre-reset': 'Zurücksetzen gesperrt: zu viele Versuche', 'sperre-jf': 'Jellyfin-Verbinden gesperrt', 'sperre-aufgehoben': 'Sperre aufgehoben',
+  'nutzer-angelegt': 'Nutzer angelegt', 'nutzer-geändert': 'Nutzer geändert', 'nutzer-gelöscht': 'Nutzer gelöscht', 'passwort-geändert': 'Eigenes Passwort geändert', 'passwort-zurückgesetzt': 'Passwort vom Admin neu gesetzt', 'passwort-selbst-zurückgesetzt': 'Passwort mit 2FA selbst zurückgesetzt', 'reset-fehler': 'Zurücksetzen fehlgeschlagen', '2fa-aktiviert': '2FA eingerichtet', '2fa-deaktiviert': '2FA ausgeschaltet', '2fa-zurückgesetzt': '2FA vom Admin zurückgesetzt', 'wiederherstellungscodes-neu': 'Neue Wiederherstellungscodes erzeugt', setup: 'Ersteinrichtung', 'setup-blockiert': 'Ersteinrichtung von außen blockiert', 'jellyfin-fehler': 'Jellyfin-Verbinden fehlgeschlagen', 'jellyfin-verbunden': 'Jellyfin verbunden', 'jellyfin-getrennt': 'Jellyfin getrennt', 'pihole-blocking': 'Pi-hole-Blocker geschaltet', 'pihole-einstellung': 'Pi-hole-Einstellung geändert', 'outfits-neu': 'Outfits neu geladen', 'name-geändert': 'Anzeigename geändert', 'messenger-schlüssel': 'Messenger-Schlüssel angelegt', 'monitor-geändert': 'Dienste-Monitor geändert', 'neues-gerät-im-netz': 'Neues Gerät im Heimnetz', 'dhl-schlüssel': 'DHL-Schlüssel geändert' };
 async function log() { const l = (await api('/api/admin/audit')).filter(x => !lf || x.ev.includes(lf) || (lf === 'fehler' && /gesperrt|abgelaufen|deaktiviert/.test(x.ev)));
-  $('#log').innerHTML = l.map(x => `<div class="it"><span class="faint">${new Date(x.t).toLocaleString('de-DE')}</span><span class="ev ${/fehler|gesperrt/.test(x.ev) ? 'bad' : ''}">${esc(x.ev)}</span><span>${esc(x.user)}</span><span class="faint">${esc(x.ip)}</span><span class="mute">${esc(x.detail)}</span></div>`).join('') || '<div class="faint">Nichts</div>'; }
+  $('#log').innerHTML = l.map(x => `<div class="it"><span class="faint">${new Date(x.t).toLocaleString('de-DE')}</span><span class="ev ${/fehler|gesperrt/.test(x.ev) ? 'bad' : ''}" title="${esc(x.ev)}">${esc(EVENTS[x.ev] || x.ev)}</span><span>${esc(x.user)}</span><span class="faint">${esc(x.ip)}</span><span class="mute">${esc(x.detail)}</span></div>`).join('') || '<div class="faint">Nichts</div>'; }
 (async () => { me = await WB.me(); load(); })();
 </script>
 </body></html>
