@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
+<title>Ablage</title>
+<style>
+  .clips { display: flex; flex-direction: column; gap: 12px; }
+  .clip { min-width: 0; }
+  .clip pre { font: 13px/1.55 var(--f-mono); background: var(--bg); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px; margin: 10px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+  .clip pre a { color: var(--acc); }
+  .clip h3 { font-size: 16px; overflow-wrap: anywhere; }
+  textarea.neu { min-height: 120px; font: 13px/1.55 var(--f-mono); }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Werkzeuge</div><h1>Ablage</h1><p>Texte, Links und Code-Schnipsel zwischen Handy und PC weiterreichen oder zum Wiederverwenden aufheben.</p></div>
+    <input type="search" id="q" placeholder="Suchen …" style="width:220px">
+  </div>
+  <div class="side">
+    <form class="panel stack" id="f">
+      <label class="field"><span>Überschrift (optional)</span><input name="t" maxlength="120"></label>
+      <label class="field"><span>Inhalt</span><textarea name="body" class="neu" maxlength="20000" required spellcheck="false"></textarea></label>
+      <div class="row between"><button type="button" class="ghost sm" id="paste">Aus Zwischenablage</button><button class="primary" id="add">Ablegen</button></div>
+      <p class="faint" style="font-size:12px">Strg + Enter legt ab. Keine Passwörter hier lagern: Die Texte liegen unverschlüsselt auf dem Server. Für Vertrauliches nimm den Messenger.</p>
+    </form>
+    <div><div class="clips" id="list"></div><p class="faint" style="font-size:12px;margin-top:10px" id="info"></p></div>
+  </div>
+</main>
+<script>
+WB.header('ablage');
+const { $, esc, uid, api, Store, toast } = WB;
+const MAX = 200, MAX_BYTES = 3.5e6; // der Server nimmt höchstens 4 MB auf einmal an
+let D = { items: [] }, q = '', shown = '';
+// Immer erst den neuesten Stand holen, dann ändern: so überschreibt ein Gerät nicht, was das andere gerade abgelegt hat
+let chain = Promise.resolve();
+const change = fn => { const run = chain.then(async () => { const cur = await api('/api/data/ablage') || { items: [] }; const before = JSON.stringify(cur).length, out = fn(cur); if (out === false) return false;
+  const text = JSON.stringify(cur); if (text.length > before && new Blob([text]).size > MAX_BYTES) { toast('Die Ablage ist voll. Lösch zuerst große Einträge.'); return false; } await api('/api/data/ablage', { method: 'PUT', body: cur }); D = cur; render(); return true; })
+  .catch(e => { toast('Nicht gespeichert: ' + e.message); return false; }); chain = run; return run; };
+// Erst entschärfen, dann Adressen anklickbar machen
+const PIN = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 3 4H7l3-4z"/></svg>';
+const rich = s => s.split(/(https?:\/\/[^\s<>"']+)/g).map((p, i) => i % 2 ? `<a href="${esc(p)}" target="_blank" rel="noopener noreferrer">${esc(p)}</a>` : esc(p)).join('');
+const when = t => new Date(t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+function render(force = true) {
+  const needle = q.toLowerCase(), l = D.items.filter(i => !needle || (i.t + '\n' + i.body).toLowerCase().includes(needle)).sort((a, b) => (b.pin ? 1 : 0) - (a.pin ? 1 : 0) || b.at - a.at);
+  const html = l.length ? l.map(i => `<div class="panel clip" data-id="${esc(i.id)}"><div class="row between"><div style="min-width:0">${i.t ? `<h3>${esc(i.t)}</h3>` : ''}<span class="faint" style="font-size:12px">${i.pin ? 'Angeheftet · ' : ''}${when(i.at)} · ${i.body.length.toLocaleString('de-DE')} Zeichen</span></div>
+      <div class="row" style="gap:4px"><button type="button" class="sm primary" data-a="copy">Kopieren</button><button type="button" class="ghost sm" data-a="pin" ${i.pin ? 'style="color:var(--acc)"' : ''} aria-pressed="${!!i.pin}" title="${i.pin ? 'Lösen' : 'Oben anheften'}" aria-label="${i.pin ? 'Lösen' : 'Oben anheften'}">${PIN}</button><button type="button" class="ghost sm" data-a="edit" aria-label="Bearbeiten">✎</button><button type="button" class="ghost sm danger" data-a="del" aria-label="Löschen">✕</button></div></div><pre>${rich(i.body)}</pre></div>`).join('')
+    : `<div class="empty">${D.items.length ? 'Kein Treffer.' : 'Noch nichts abgelegt. Was du hier einträgst, siehst du auf jedem Gerät, an dem du angemeldet bist.'}</div>`;
+  // Beim automatischen Nachladen nur neu zeichnen, wenn sich etwas geändert hat (sonst springt die Auswahl weg)
+  if (force || html !== shown) $('#list').innerHTML = shown = html;
+  $('#info').textContent = D.items.length ? `${D.items.length} von höchstens ${MAX} Einträgen · aktualisiert sich von selbst` : '';
+}
+async function refresh() { if (document.hidden || document.querySelector('dialog[open]') || String(getSelection())) return; try { await chain; D = await api('/api/data/ablage') || { items: [] }; render(false); } catch {} }
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  // Ohne HTTPS gibt es die moderne Zwischenablage nicht
+  const a = document.createElement('textarea'); a.value = text; a.style.position = 'fixed'; a.style.opacity = '0'; document.body.appendChild(a); a.select(); let ok = false; try { ok = document.execCommand('copy'); } catch {} a.remove(); return ok;
+}
+$('#f').onsubmit = async e => { e.preventDefault(); const f = e.target, body = f.body.value, t = f.t.value.trim(); if (!body.trim()) return toast('Da steht noch nichts'); $('#add').disabled = true;
+  const ok = await change(d => { if (d.items.length >= MAX) { toast(`Die Ablage ist voll (${MAX}). Lösch zuerst etwas.`); return false; } d.items.push({ id: uid(), t, body: body.slice(0, 20000), pin: false, at: Date.now() }); });
+  $('#add').disabled = false; if (ok) { f.reset(); toast('Abgelegt'); } };
+$('#f').body.addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $('#f').requestSubmit(); } });
+$('#paste').onclick = async () => { try { const t = await navigator.clipboard.readText(); if (!t) return toast('Die Zwischenablage ist leer'); $('#f').body.value = t.slice(0, 20000); $('#f').body.focus(); } catch { toast('Der Browser erlaubt das nicht. Füg mit Strg + V ein.'); } };
+$('#q').oninput = e => { q = e.target.value; render(); };
+$('#list').addEventListener('click', async e => { const b = e.target.closest('[data-a]'); if (!b) return; const id = b.closest('[data-id]').dataset.id, i = D.items.find(x => x.id === id); if (!i) return;
+  const a = b.dataset.a, find = d => d.items.find(x => x.id === id);
+  if (a === 'copy') return toast(await copy(i.body) ? 'Kopiert' : 'Kopieren ging nicht. Markiere den Text und drück Strg + C.');
+  if (a === 'pin') return change(d => { const x = find(d); if (!x) return false; x.pin = !x.pin; });
+  if (a === 'del') { if (confirm('Diesen Eintrag löschen?')) change(d => { d.items = d.items.filter(x => x.id !== id); }); return; }
+  const v = await WB.editForm('Eintrag bearbeiten', [{ k: 't', l: 'Überschrift', v: i.t }, { k: 'body', l: 'Inhalt', type: 'textarea', v: i.body }]);
+  if (v && v !== 'delete' && v.body) change(d => { const x = find(d); if (!x) { toast('Der Eintrag wurde inzwischen gelöscht'); return false; } x.t = v.t; x.body = v.body.slice(0, 20000); x.at = Date.now(); }); });
+document.addEventListener('visibilitychange', refresh); window.addEventListener('focus', refresh); setInterval(refresh, 10000);
+(async () => { D = Object.assign(D, await Store.get('ablage', D)); render(); })();
+</script>
+</body></html>

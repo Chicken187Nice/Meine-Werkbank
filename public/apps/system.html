@@ -15,7 +15,7 @@
 </head><body>
 <main class="wrap">
   <div class="page-head">
-    <div><div class="label">Technik</div><h1>System</h1><p>Auslastung der Umgebung, in der die Werkbank läuft: Docker auf deinem Laptop. Werte alle 30 Sekunden, Verlauf der letzten Stunde. Wird es knapp, kommt ein Hinweis auf die Startseite.</p></div>
+    <div><div class="label">Technik</div><h1>System</h1><p>Auslastung des Rechners, auf dem die Werkbank in Docker läuft. Werte alle 30 Sekunden, Verlauf der letzten Stunde. Wird es knapp, kommt ein Hinweis auf die Startseite.</p></div>
     <span class="mute" id="upd" style="font-size:12px"></span>
   </div>
   <div class="g4" id="gauges"></div>
@@ -40,7 +40,8 @@ async function load() {
     + gauge('Speicher (Docker)', diskP, S.disk ? `${gb(S.disk.free)} frei` : 'unbekannt') + `<div class="panel stat"><div class="label">Werkbank-Daten</div><div class="v acc">${mb(S.dataSize)}</div><div class="s">${S.users} Nutzer · ${S.sessions} Sitzungen</div><div class="s">läuft seit ${dur(S.appUptime)}</div></div>`;
   $('#kv').innerHTML = [['Rechnername', S.host], ['System', S.platform], ['Prozessor', S.cpuModel], ['Node.js', S.node], ['System läuft seit', dur(S.uptime)], ['Werkbank gestartet', new Date(S.started).toLocaleString('de-DE')]].map(([k, v]) => `<span>${k}</span><span class="mono">${esc(v)}</span>`).join('');
   $('#chart').innerHTML = S.hist.length ? S.hist.map(h => `<div title="${new Date(h.t).toLocaleTimeString('de-DE')}: CPU ${h.cpu}% · RAM ${h.mem}%"><i style="height:${h.cpu}%;background:var(--acc)"></i></div>`).join('') + '' : '<div class="faint" style="margin:auto;font-size:13px">Verlauf sammelt sich in den nächsten Minuten</div>';
-  if (S.hist.length) $('#chart').innerHTML = S.hist.map(h => `<div title="${new Date(h.t).toLocaleTimeString('de-DE')}: CPU ${h.cpu}% · RAM ${h.mem}%" style="flex-direction:row;align-items:end;gap:1px"><i style="flex:1;height:${Math.max(1, h.cpu)}%;background:var(--acc)"></i><i style="flex:1;height:${h.mem}%;background:#5aa9ff;opacity:.7"></i></div>`).join('');
+  // Leere Plätze davor: wenige Messwerte sollen nicht als riesige Balken erscheinen
+  if (S.hist.length) $('#chart').innerHTML = '<div></div>'.repeat(Math.max(0, 60 - S.hist.length)) + S.hist.map(h => `<div title="${new Date(h.t).toLocaleTimeString('de-DE')}: CPU ${h.cpu}% · RAM ${h.mem}%" style="flex-direction:row;align-items:end;gap:1px"><i style="flex:1;height:${Math.max(1, h.cpu)}%;background:var(--acc)"></i><i style="flex:1;height:${h.mem}%;background:#5aa9ff;opacity:.7"></i></div>`).join('');
   $('#warn').innerHTML = S.warnings.length ? S.warnings.map(w => `<div class="bad" style="font-size:14px">⚠ ${esc(w)}</div>`).join('') : '<div class="good" style="font-size:13px">✓ Alles im grünen Bereich</div>';
   $('#upd').textContent = 'Stand ' + new Date().toLocaleTimeString('de-DE');
 }

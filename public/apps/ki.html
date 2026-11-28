@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/ki-chat.js"></script>
+<title>KI-Assistent</title>
+<style>
+  #chat { height: max(420px, calc(100vh - 290px)); height: max(420px, calc(100dvh - 290px)); }
+  @media (max-width: 640px) { #chat { height: max(440px, calc(100dvh - 170px)); } .page-head p { display: none; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Werkzeuge</div><h1>KI-Assistent</h1><p>Frag nach deinen Terminen, Aufgaben oder Finanzen, nach dem Server oder nach allem anderen. Das Sprachmodell läuft bei dir, nichts geht an einen fremden Dienst.</p></div>
+  </div>
+  <div class="panel" id="chat"></div>
+</main>
+<script>
+WB.header('ki');
+WBKI.mount(document.getElementById('chat'), { page: '' });
+</script>
+</body></html>

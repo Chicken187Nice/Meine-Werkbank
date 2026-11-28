@@ -58,6 +58,7 @@ fi
 # --- Bauen & starten -----------------------------------------------------------
 say "Werkbank wird gebaut und gestartet …"
 PROFILE=""; grep -q '^WB_DOMAIN=.' .env && PROFILE="--profile internet"
+grep -q '^WB_KI=1' .env && PROFILE="$PROFILE --profile ki"
 mkdir -p status   # vor Docker anlegen, sonst gehört der Ordner root und der Sammler kann nicht schreiben
 $DOCKER compose $PROFILE up -d --build
 

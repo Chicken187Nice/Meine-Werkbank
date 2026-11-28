@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="de"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script>
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/cockpit.js"></script><script src="/assets/kalender-lib.js"></script>
 <title>Werkbank</title>
 <style>
   .topbar { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(14px); background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--line); }
@@ -153,6 +153,7 @@
     <input id="q" placeholder="App suchen und mit Enter öffnen …" autocomplete="off"><span class="kbd">/</span></label>
   <div class="row" style="gap:4px">
     <span class="chip" id="phase"></span>
+    <button class="ghost icon hide" id="kiBtn" title="KI fragen" aria-label="KI fragen"></button>
     <button class="ghost icon" id="theme" title="Design umschalten"></button>
     <button class="ghost icon hide" id="ckBtn" title="Cockpit einstellen" aria-label="Cockpit einstellen"></button>
     <button class="ghost icon" id="setBtn" title="Einstellungen" aria-label="Einstellungen"></button>
@@ -374,6 +375,10 @@ async function live() {
       setLive('wartung', `<span class="dot"></span>${a.count ?? '?'} Updates${disk ? ` · Platte ${disk.percent} %` : ''}${d.backups.length ? '' : ' · <span class="bad">keine Sicherung</span>'}`); },
     geraete: async () => { const d = await api('/api/geraete').catch(() => null); if (!d || !d.t) return; const neu = d.devices.filter(x => !x.known).length;
       setLive('geraete', `<span class="dot"></span>${d.devices.filter(x => x.online).length} online${neu ? ` · <span class="bad">${neu} neu</span>` : ''}`); },
+    kalender: async () => { const d = await get('kalender', { events: [] }), bis = ymd(WBKalender.plus(WBKalender.day(T), 6)); const n = (d.events || []).reduce((s, e) => s + WBKalender.tage(e, T, bis).length, 0); if (n) setLive('kalender', `<span class="dot"></span>${n} Termin${n > 1 ? 'e' : ''} in 7 Tagen`); },
+    arbeitszeit: async () => { const d = await get('arbeitszeit', { days: {} }), r = (d.days || {})[T]; if (r && r.from) setLive('arbeitszeit', `<span class="dot"></span>${r.to ? `Heute ${r.from} bis ${r.to}` : r.ps ? 'Pause' : `Eingestempelt seit ${r.from}`}`); },
+    merkliste: async () => { const d = await get('merkliste', { items: [] }), n = s => d.items.filter(i => i.status === s).length; if (d.items.length) setLive('merkliste', `<span class="dot"></span>${n('offen')} geplant · ${n('laeuft')} läuft`); },
+    ablage: async () => { const d = await get('ablage', { items: [] }); if (d.items.length) setLive('ablage', `<span class="dot"></span>${d.items.length} abgelegt`); },
     pakete: async () => { const d = await get('pakete', { pakete: [] }); const n = d.pakete.filter(p => !p.done).length; if (n) setLive('pakete', `<span class="dot"></span>${n} offen`); },
     system: async () => { const s = await api('/api/system').catch(() => null); if (s) setLive('system', `<span class="dot"></span>RAM ${Math.round((1 - s.mem.free / s.mem.total) * 100)} %${s.disk ? ' · Disk ' + Math.round((1 - s.disk.free / s.disk.total) * 100) + ' %' : ''}`); }
   };
@@ -383,6 +388,8 @@ async function live() {
 // ---------- Hinweise: jede Kachel meldet, was fehlt (pro Kachel abschaltbar) ----------
 const NOTIFY = {
   aufgaben: { l: 'Fällige und überfällige Aufgaben', def: true },
+  kalender: { l: 'Termine heute und morgen', def: true },
+  arbeitszeit: { l: 'Eingestempelt oder Ausstempeln vergessen', def: true },
   schule: { l: 'Nächste Schulstunde heute', def: true },
   berichtsheft: { l: 'Berichtsheft der Woche unvollständig (ab Donnerstag) und fehlende Vorwochen', def: true },
   gewohnheiten: { l: 'Gewohnheiten, die heute noch offen sind', def: true },
@@ -412,6 +419,15 @@ const minusN = (s, n, u) => { const x = parseYmd(s); if (u === 'd') x.setDate(x.
 const PRODUCERS = {
   aufgaben: async T => { const d = await get('aufgaben', { tasks: [] }); const o = d.tasks.filter(t => t.col !== 'fertig' && t.due && t.due <= T); const over = o.filter(t => t.due < T).length;
     return o.length ? [{ text: o.length === 1 ? o[0].t : `${o.length} Aufgaben fällig`, sub: over ? `${over} davon überfällig` : 'heute fällig', val: o.length, bad: !!over }] : []; },
+  kalender: async (T, now) => { const d = await get('kalender', { events: [], land: 'BY' }), K = WBKalender, M = ymd(K.plus(K.day(T), 1)), out = [];
+    for (const [s, w] of [[T, 'heute'], [M, 'morgen']]) { const f = K.feiertag(s, d.land || 'BY'); if (f) out.push({ text: f, sub: `Feiertag ${w}`, val: w });
+      (d.events || []).filter(e => K.tage(e, s, s).length && !(s === T && e.time && !e.end && e.time < now.toTimeString().slice(0, 5))).sort((a, b) => (a.time || '').localeCompare(b.time || '')).forEach(e => out.push({ text: e.t, sub: e.time ? `${w} um ${e.time} Uhr` : `${w}, ganztägig`, val: e.time || w })); }
+    return out.slice(0, 3); },
+  arbeitszeit: async (T, now) => { const d = await get('arbeitszeit', { days: {} }), r = (d.days || {})[T], out = [];
+    const forgot = Object.entries(d.days || {}).filter(([s, x]) => s < T && x.from && !x.to).length;
+    if (forgot) out.push({ text: 'Ausstempeln vergessen', sub: `bei ${forgot} Tag${forgot > 1 ? 'en' : ''} fehlt die Zeit bei „Bis“`, val: '!', bad: true });
+    if (r && r.from && !r.to) out.push({ text: r.ps ? 'Du machst Pause' : 'Du bist eingestempelt', sub: `seit ${r.from} Uhr`, val: r.from });
+    return out; },
   schule: async (T, now) => { const d = await get('schule', { plan: {}, times: [] }); const wd = (now.getDay() + 6) % 7; if (wd > 4) return []; const hm = now.toTimeString().slice(0, 5);
     const l = (d.times || []).map((t, s) => ({ t, c: d.plan[wd + '-' + s] })).filter(x => x.c && x.c.fach && x.t[1] > hm);
     return l.length ? [{ text: `${l[0].t[0] <= hm ? 'Jetzt' : 'Ab ' + l[0].t[0]}: ${l[0].c.fach}`, sub: [...new Set(l.slice(1).map(x => x.c.fach))].slice(0, 3).join(', ') || 'letzte Stunde heute', val: l[0].c.raum || '' }] : []; },
@@ -580,6 +596,7 @@ layout();
   me = await WB.me(); allowed = APPS.filter(a => me.apps.includes(a.id));
   if (me.admin) { $('#adminBtn').classList.remove('hide'); $('#adminBtn').innerHTML = icon('admin', 15) + 'Verwaltung'; }
   $('#userBtn').innerHTML = icon('konto', 15) + esc(me.shown);
+  $('#kiBtn').innerHTML = icon('ki', 18); WB.kiButton($('#kiBtn'), me, '');
   setThemeIcon(); tick(); setInterval(tick, 1000); drawArc();
   hub = Object.assign(hub, await Store.get('hub', hub)); if (!Array.isArray(hub.pins)) hub.pins = [];
   if (!hub.pins.length && !hub.pinsInit) { hub.pins = ['aufgaben', 'berichtsheft', 'schule', 'outfits'].filter(has); hub.pinsInit = true; Store.set('hub', hub); }

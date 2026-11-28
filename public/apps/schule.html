@@ -59,7 +59,7 @@ function renderPlan() {
   let h = '<div></div>' + DAYS.map((d, i) => `<div class="h ${i === td ? 'today' : ''}">${d}</div>`).join('');
   D.times.forEach(([a, b], s) => { h += `<div class="n">${s + 1}<span style="font-weight:400;font-size:10px">${a}</span></div>`;
     DAYS.forEach((d, i) => { const c = D.plan[i + '-' + s]; const isNow = i === td && hm >= a && hm < b;
-      h += c && c.fach ? `<button class="cell f ${isNow ? 'now' : ''}" style="--sc:${esc(D.colors[c.fach] || '#5aa9ff')}" data-c="${i}-${s}"><b>${esc(c.fach)}</b><span>${esc([c.raum, c.lehrer].filter(Boolean).join(' · '))}</span></button>` : `<button class="cell ${isNow ? 'now' : ''}" data-c="${i}-${s}"></button>`; }); });
+      h += c && c.fach ? `<button class="cell f ${isNow ? 'now' : ''}" style="--sc:${esc(D.colors[c.fach] || '#5aa9ff')}" data-c="${i}-${s}" aria-label="${d}, ${s + 1}. Stunde bearbeiten" title="${d}, ${s + 1}. Stunde"><b>${esc(c.fach)}</b><span>${esc([c.raum, c.lehrer].filter(Boolean).join(' · '))}</span></button>` : `<button class="cell ${isNow ? 'now' : ''}" data-c="${i}-${s}" aria-label="${d}, ${s + 1}. Stunde bearbeiten" title="${d}, ${s + 1}. Stunde"></button>`; }); });
   $('#plan').innerHTML = h;
   $('#subjects').innerHTML = subjects().map(s => `<option value="${esc(s)}">`).join('');
 }

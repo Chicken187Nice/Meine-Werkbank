@@ -485,3 +485,45 @@ input.switch:checked { background: var(--acc); } input.switch:checked::after { t
 .pvtiles.liste b, .pvtiles.kompakt b { width: 55%; }
 /* Pixelschrift: kein künstliches Fettdrucken, sonst laufen die Pixel ineinander */
 :root[data-pixel] body, .set-tpl .tpl strong { font-synthesis-weight: none; }
+
+/* ---------- KI-Chat (KI-Seite und Seitenleiste) ---------- */
+.wb-chat { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.wb-chat .log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; min-height: 120px; padding-right: 4px; overscroll-behavior: contain; }
+.wb-chat .start { margin: auto; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; max-width: 440px; }
+.wb-chat .start .ic { color: var(--acc); }
+.wb-chat .start .chip { white-space: normal; text-align: left; line-height: 1.4; padding: 7px 12px; }
+.wb-chat .msg { max-width: min(88%, 720px); min-width: 0; flex-shrink: 0; }
+.wb-chat .msg.me { align-self: flex-end; }
+.wb-chat .msg .b { padding: 10px 13px; border-radius: 14px; background: var(--bg); border: 1px solid var(--line); overflow-wrap: anywhere; line-height: 1.55; font-size: 14px; }
+.wb-chat .msg.me .b { background: color-mix(in srgb, var(--acc) 18%, var(--bg)); border-color: color-mix(in srgb, var(--acc) 40%, var(--line)); white-space: pre-wrap; }
+.wb-chat .msg .b:empty { display: none; }
+.wb-chat .msg .b > div { white-space: pre-wrap; }
+.wb-chat .msg .b > * + * { margin-top: 8px; }
+.wb-chat .msg pre { font: 12.5px/1.5 var(--f-mono); background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px; overflow-x: auto; white-space: pre; }
+.wb-chat .msg code { font-family: var(--f-mono); font-size: .92em; }
+.wb-chat .msg .m { font-size: 11.5px; color: var(--faint); padding: 4px 6px 0; }
+.wb-chat .msg .m button { padding: 0 6px; font-size: 11.5px; }
+.wb-chat .send { display: flex; gap: 8px; align-items: flex-end; }
+.wb-chat .send textarea { flex: 1; min-width: 0; resize: none; min-height: 52px; max-height: 160px; }
+.wb-chat .opts { gap: 10px; font-size: 13px; }
+.wb-chat .opts label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+.wb-chat .opts select { width: auto; max-width: 100%; padding: 5px 8px; font-size: 13px; }
+.wb-chat > p { font-size: 11.5px; margin: 0; }
+.wb-chat .vor { margin-top: 8px; padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--acc) 45%, var(--line)); border-radius: var(--r-sm); background: var(--bg); font-size: 13.5px; width: min(440px, 100%); display: flex; flex-direction: column; gap: 9px; }
+.wb-chat .vor.fertig { display: block; border-color: color-mix(in srgb, var(--good) 55%, var(--line)); }
+.wb-chat .vor.weg { display: block; border-color: var(--line); color: var(--faint); }
+.wb-chat .vor .k { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.wb-chat .vor .f { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.wb-chat .vor label { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wb-chat .vor label.breit { grid-column: 1 / -1; }
+.wb-chat .vor label span { font-size: 11.5px; color: var(--faint); }
+.wb-chat .vor :is(input, select, textarea) { width: 100%; min-width: 0; padding: 6px 8px; font-size: 13.5px; }
+.wb-chat .vor summary { cursor: pointer; font-size: 12px; color: var(--mute); }
+.wb-chat .vor details > .f { margin-top: 8px; }
+.wb-chat .msg > [data-all] { margin-top: 8px; }
+.wb-ki { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100%); z-index: 60; background: var(--bg2); border-left: 1px solid var(--line2); box-shadow: -12px 0 40px rgb(0 0 0 / .35); display: none; flex-direction: column; }
+.wb-ki.offen { display: flex; }
+.wb-ki .head { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.wb-ki .head b { display: flex; align-items: center; gap: 8px; }
+.wb-ki .body { flex: 1; min-height: 0; padding: 12px 14px; }
+

@@ -8,7 +8,7 @@
   @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
   .look { border: 1px solid var(--line); border-radius: 20px; overflow: hidden; background: var(--bg2); display:flex; flex-direction:column; }
   .look-h { display:flex; align-items:center; gap: 12px; padding: 16px 18px; }
-  .look-h h3 { font-size: 22px; } .look-h .sum { font: 600 13px var(--f-mono); color: var(--mute); margin-left: auto; white-space: nowrap; }
+  .look-h { flex-wrap: wrap; } .look-h h3 { font-size: 22px; flex: 1 1 140px; min-width: 0; } .look-h .sum { font: 600 13px var(--f-mono); color: var(--mute); margin-left: auto; white-space: nowrap; }
   .badge { display:inline-flex; align-items:center; gap: 7px; padding: 4px 10px 4px 5px; border-radius: 99px; font: 600 12px var(--f-body); border: 1px solid var(--line2); }
   .badge i { width: 16px; height: 16px; border-radius: 50%; display:inline-block; border: 1px solid #777; }
   .bw i { background: linear-gradient(90deg, #f4f4f2 50%, #111 50%); } .br i { background: linear-gradient(90deg, #d0122f 50%, #111 50%); }

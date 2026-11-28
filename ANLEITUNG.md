@@ -231,6 +231,77 @@ Sendungsnummer, Dienst und Inhalt eintragen. Automatischen Status gibt es nur f�
 (API „Shipment Tracking - Unified“), einzutragen auf der Pakete-Seite durch einen Admin. Dabei wird die Sendungsnummer an DHL übermittelt.
 Bei anderen Diensten den Stand selbst setzen; der Link öffnet die Verfolgung beim Anbieter.
 
+## Kalender
+
+- **+ Termin** oder Doppelklick auf einen Tag. Termine können mehrtägig sein und sich wöchentlich, monatlich oder jährlich wiederholen.
+- Oben das **Bundesland** wählen, dann stimmen die Feiertage.
+- Zusätzlich erscheinen fällige Aufgaben, Countdowns, Reisen und Kündigungsfristen, aber nur aus Kacheln, die du selbst nutzen darfst. Ändern kannst du sie in der jeweiligen Kachel.
+- **Als .ics speichern** erzeugt eine Datei mit deinen eigenen Terminen für Handy oder Outlook. Die Werkbank gleicht sich nicht selbst mit anderen Kalendern ab.
+
+## Arbeitszeit
+
+- **Kommen**, **Pause**, **Gehen**. Vergessene oder falsche Zeiten korrigierst du unten über den Stift am Tag.
+- Unter **Einstellungen**: Wochenstunden, Arbeitstage, Bundesland, Startstand des Stundenkontos und „unter 18“ (strengere Pausenregeln).
+- Das Stundenkonto zählt nur eingetragene, abgeschlossene Tage. Die Hinweise zu Pausen und Höchstzeiten sind eine Hilfe und ersetzen weder die Zeiterfassung im Betrieb noch eine Rechtsauskunft.
+
+## Merkliste, Ablage, Dev-Werkzeuge
+
+- **Merkliste:** Filme, Serien, Bücher und Spiele mit Stand (geplant, läuft, fertig), Fortschritt, Notiz und Sternen. **Was als Nächstes?** schlägt etwas Geplantes vor.
+- **Ablage:** Text am einen Gerät ablegen, am anderen kopieren. Die Seite lädt alle paar Sekunden nach. Die Texte liegen **unverschlüsselt** auf dem Server, also keine Passwörter. Höchstens 200 Einträge mit je 20.000 Zeichen.
+- **Dev-Werkzeuge:** JSON, Kodieren, Zeitstempel, Regex, Prüfsummen und UUID, JWT, Farben, Zahlensysteme, Textvergleich. Alles rechnet im Browser, nichts wird gespeichert. Prüfsummen brauchen eine sichere Verbindung (https oder localhost).
+
+Neue Kacheln sieht zuerst nur der Owner. Für andere Nutzer gibst du sie in der **Verwaltung** frei.
+
+## KI-Assistent (lokal)
+
+Ein Sprachmodell, das auf deinem eigenen Server läuft (Ollama). Nichts geht an einen fremden KI-Dienst.
+
+**Einrichten** (einmal, lädt mehrere Gigabyte):
+
+```
+bash ki-einrichten.sh qwen3.5:4b qwen3.5:2b
+docker compose --profile internet --profile ki up -d --build
+```
+
+Ohne Internet-Zugriff von außen lässt du `--profile internet` weg. Unter Windows (`start.bat`) wird die KI nicht automatisch mitgestartet.
+
+**Benutzen:** Kachel **KI-Assistent** oder der Funken-Knopf oben rechts auf jeder Seite. Auf einer Unterseite weiß die KI, wo du bist, und liest deren Einträge mit. Unter jeder Antwort steht, welche Bereiche sie gelesen hat.
+
+**Was sie sieht:**
+
+- Nur, was dein Konto selbst sehen darf. Der Server sucht die Daten vor der Frage aus; das Modell selbst hat keinen Zugriff auf irgendetwas.
+- Von Einträgen nur deine eigenen, nie die anderer Nutzer. Das gilt auch für Admins und den Owner.
+- Fragst du nach den Terminen oder Einträgen eines anderen Kontos („Welche Termine hat …?“), antwortet die KI nur, dass sie darüber keine Auskunft gibt. Bei Personen ohne Konto gibt sie dieselbe Auskunft, dort hält sich aber nur das Modell daran. In keinem Fall hat sie fremde Einträge vorliegen.
+- Aus dem **Protokoll** liest sie nur deine eigenen Anmeldungen, von allen anderen bloß Anzahlen. Wer sich wann angemeldet hat, siehst du in der Kachel selbst.
+- Serverdaten (Docker, Pi-hole, Heimnetz …) nur mit der Freigabe der jeweiligen Kachel.
+- Nie Passwörter, Schlüssel oder den Messenger.
+- Mit abgewähltem **Meine Daten nutzen** gar nichts davon (antwortet dann schneller).
+
+### Eintragen lassen
+
+Schreib einfach, was wohin soll:
+
+- „Trag morgen um 15 Uhr Zahnarzt ein“
+- „Setz Milch und Eier auf die Einkaufsliste“
+- „Neue Aufgabe: Berichtsheft abgeben bis Freitag, hohe Priorität“
+- „Trag ein, dass ich gestern 12,50 € für Döner ausgegeben habe“
+
+Die KI **speichert nie von selbst**. Sie zeigt eine Karte mit den Angaben; du kannst sie ändern, mit **Eintragen** speichern oder **Verwerfen**. Datum, Uhrzeit und Beträge liest der Server selbst aus deinem Text.
+
+Möglich in: Kalender, Aufgaben, Notizen, Küche (Einkaufsliste, Vorrat), Finanzen (Buchung, Sparziel), Abo-Killer, Countdowns, Gewohnheiten, Merkliste, Ablage, Pakete, Schule (Note), Arbeitszeit, Berichtsheft, C#-Trainer (Lernkarte) und Reiseplaner (Packliste). Immer nur in Kacheln, die dein Konto benutzen darf, und nur bei deinen eigenen Einträgen. Ändern und Löschen geht nur in der Kachel selbst. Vorhandenes wird nie überschrieben.
+
+Hast du dieselbe Kachel noch in einem anderen Fenster offen, lädt es beim nächsten Speichern neu, damit der neue Eintrag nicht verloren geht.
+
+### Prozessor
+
+Die KI darf höchstens **75 %** des Prozessors nutzen (auf 4 Kernen also 3). `ki-einrichten.sh` rechnet das für deinen Rechner aus und trägt `WB_KI_CPUS` in `.env` ein.
+
+**Modelle:** `qwen3.5:4b` ist voreingestellt (gründlicher), `qwen3.5:2b` ist schneller, schreibt aber öfter Ungenaues. Umschalten kannst du unter dem Eingabefeld.
+
+**Gut zu wissen:** Ohne Grafikkarte braucht eine Antwort Geduld. Gemessen auf einem i5 mit 4 Kernen: erstes Wort nach etwa 20–30 s (klein) bzw. 35–50 s (groß), fertig nach 30–80 s. Auf schnellerer Hardware entsprechend weniger. Es wird immer nur eine Antwort gleichzeitig berechnet, weitere warten. Kleine Modelle irren sich öfter als große Online-Dienste, besonders beim Rechnen und bei Fakten. Dein Chatverlauf wird bei deinen Daten gespeichert (**Neuer Chat** löscht ihn).
+
+Neue Nutzer bekommen die KI erst, wenn du die Kachel in der **Verwaltung** freigibst.
+
 ## Hinweise auf der Startseite
 
 Jede Kachel kann im Bereich „Heute“ melden, was fehlt oder ansteht, zum Beispiel ein unfertiges Berichtsheft, fällige Aufgaben oder Pi-hole-Warnungen.

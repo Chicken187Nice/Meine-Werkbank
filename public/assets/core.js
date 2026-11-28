@@ -20,6 +20,12 @@
     fokus: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5M9 2h6"/>',
     notizen: '<path d="M5 3h10l4 4v14H5z"/><path d="M15 3v4h4M8 12h8M8 16h6"/>',
     passwort: '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
+    kalender: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 17.5h.01M12 17.5h.01"/>',
+    arbeitszeit: '<path d="M4 12V8h15v3M4 8v11h8M9 8V5h5v3"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2l1.5 1"/>',
+    merkliste: '<path d="M11 6h9M11 12h9M11 18h9M4 6l1.5 1.5L8 5M4 12l1.5 1.5L8 11M4 18l1.5 1.5L8 17"/>',
+    ablage: '<rect x="8" y="3" width="8" height="4" rx="1"/><path d="M8 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M8 12h8M8 16h5"/>',
+    ki: '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M18.5 15l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9zM5.5 15.5l.7 1.6 1.6.7-1.6.7-.7 1.6-.7-1.6-1.6-.7 1.6-.7z"/>',
+    devtools: '<path d="M8 8l-5 4 5 4M16 8l5 4-5 4M14 4l-4 16"/>',
     countdown: '<path d="M6 2h12M6 22h12M7 2c0 6 10 6 10 10S7 16 7 22M17 2c0 6-10 6-10 10s10 4 10 10"/>',
     outfits: '<path d="M8 3l4 3 4-3 5 4-3 4-2-1v11H8V10l-2 1-3-4z"/>',
     messenger: '<path d="M4 5h16v11H9l-5 4z"/><path d="M9 10h6"/>',
@@ -97,7 +103,13 @@
     { id: 'wartung', t: 'Updates & Backups', g: 'Technik', d: 'Updates, Sicherung, Speicherplatz' },
     { id: 'geraete', t: 'Heimnetz-Geräte', g: 'Technik', d: 'Wer ist im Netz, was ist neu' },
     { id: 'pakete', t: 'Pakete', g: 'Alltag', d: 'Sendungen verfolgen' },
-    { id: 'jellyfin', t: 'Jellyfin', g: 'Freizeit', d: 'Filme und Serien vom Server' }
+    { id: 'jellyfin', t: 'Jellyfin', g: 'Freizeit', d: 'Filme und Serien vom Server' },
+    { id: 'kalender', t: 'Kalender', g: 'Organisation', d: 'Termine, Feiertage, Fristen' },
+    { id: 'arbeitszeit', t: 'Arbeitszeit', g: 'Ausbildung', d: 'Stempeluhr und Stundenkonto' },
+    { id: 'merkliste', t: 'Merkliste', g: 'Freizeit', d: 'Filme, Serien, Bücher, Spiele' },
+    { id: 'ablage', t: 'Ablage', g: 'Werkzeuge', d: 'Texte zwischen Handy und PC' },
+    { id: 'devtools', t: 'Dev-Werkzeuge', g: 'Werkzeuge', d: 'JSON, Regex, Base64, Hashes' },
+    { id: 'ki', t: 'KI-Assistent', g: 'Werkzeuge', d: 'Lokale KI auf deinem Server' }
   ].map((a, i) => ({ ...a, nr: String(i + 1).padStart(2, '0') }));
   // ---------- Persönliche Einstellungen (Motor in design.js) ----------
   const D = window.WBDesign({ APPS, GROUPS, toast: m => toast(m), save: (k, v) => Store.set(k, v), logout: () => logout(true) });
@@ -116,6 +128,7 @@
     let r; try { r = await fetch(url, o); }
     catch { throw Object.assign(new Error('Server nicht erreichbar'), { hint: 'Prüfe deine Verbindung und versuch es gleich noch einmal. Es wurde vermutlich nichts gespeichert.' }); }
     if (r.status === 401) { location.href = '/login?grund=abgemeldet&next=' + encodeURIComponent(location.pathname); throw new Error('Nicht angemeldet'); }
+    if (opt.stand) opt.stand(r.headers.get('X-WB-Stand'));
     const txt = await r.text(); let data; try { data = txt ? JSON.parse(txt) : null; } catch { data = txt; }
     if (r.status === 403 && data && data.setup2fa && location.pathname !== '/apps/konto') location.href = '/apps/konto';
     if (!r.ok) throw Object.assign(new Error((data && data.error) || ('Fehler ' + r.status)), { status: r.status, hint: data && data.hint, retryMin: data && data.retryMin });
@@ -126,9 +139,9 @@
 
   // ---------- Speicher: pro Nutzer auf dem Server (Docker-Volume) ----------
   const Store = {
-    _t: {}, _p: {},
+    _t: {}, _p: {}, _s: {}, // _s: Stand der geladenen Daten, damit eine veraltete Seite nichts überschreibt
     async get(key, def) {
-      try { const v = await api('/api/data/' + key); return v === null ? clone(def) : v; } // null = noch nichts gespeichert
+      try { const v = await api('/api/data/' + key, { stand: s => { if (s !== null) this._s[key] = s; } }); return v === null ? clone(def) : v; } // null = noch nichts gespeichert
       catch (e) { toast('Laden fehlgeschlagen: ' + e.message); return clone(def); }
     },
     set(key, val) {
@@ -141,8 +154,11 @@
       const body = this._p[key]; if (body === undefined) return Promise.resolve(); delete this._p[key];
       // keepalive rettet das Speichern beim Seitenwechsel, der Browser erlaubt dafür aber nur 64 kB gleichzeitig:
       // Antwort immer lesen (gibt das Kontingent frei) und bei Ablehnung normal senden
-      const send = keepalive => fetch('/api/data/' + key, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-WB': '1' }, body, keepalive })
-        .then(r => r.text().then(() => { if (!r.ok) toast('Speichern fehlgeschlagen'); }));
+      const headers = { 'Content-Type': 'application/json', 'X-WB': '1', ...(key in this._s ? { 'X-WB-Stand': this._s[key] } : {}) };
+      const send = keepalive => fetch('/api/data/' + key, { method: 'PUT', headers, body, keepalive })
+        .then(r => r.text().then(() => {
+          if (r.status === 409) { toast('Inzwischen kam ein neuer Eintrag dazu. Die Seite lädt neu, deine letzte Änderung bitte wiederholen.'); setTimeout(() => location.reload(), 2500); }
+          else if (!r.ok) toast('Speichern fehlgeschlagen'); }));
       const small = body.length < 60000;
       return send(small).catch(e => { if (small) return send(false); throw e; }).catch(() => toast('Server nicht erreichbar, nicht gespeichert'));
     },
@@ -203,6 +219,18 @@
   }
 
   // ---------- Kopfzeile für Unterseiten ----------
+  // Knopf „KI fragen“: nur mit Freigabe sichtbar; der Chat wird erst beim ersten Öffnen geladen
+  function kiButton(btn, u, page) {
+    if (!btn || !u.apps.includes('ki')) return;
+    btn.classList.remove('hide');
+    let loading = null;
+    btn.onclick = async () => {
+      loading = loading || new Promise((ok, no) => { const s = document.createElement('script'); s.src = '/assets/ki-chat.js'; s.onload = ok; s.onerror = () => { loading = null; s.remove(); no(new Error()); }; document.head.appendChild(s); });
+      try { await loading; window.WBKI.drawer(page); } catch { toast('Der KI-Chat ließ sich nicht laden'); }
+    };
+    // Nach dem Eintragen lädt die Seite neu; die Seitenleiste soll dann wieder offen sein
+    try { if (sessionStorage.getItem('wb-ki-offen') === location.pathname) { sessionStorage.removeItem('wb-ki-offen'); btn.click(); } } catch {}
+  }
   function header(id) {
     const app = APPS.find(a => a.id === id);
     document.title = (app ? app.t + ' · ' : '') + 'Werkbank';
@@ -213,6 +241,7 @@
       <a class="crumb" href="/" title="Zur Werkbank (Esc)"><span class="home">${icon('home', 15)}</span>Werkbank <span>/</span>
       ${app ? `<span class="idx">${esc(groupLabel(app.g))}</span> <span>/</span> <b>${esc(app.t)}</b>` : ''}</a>
       <span class="clock mono" id="wb-clock"></span>
+      <button class="ghost icon hide" id="wb-ki" title="KI fragen" aria-label="KI fragen">${icon('ki', 17)}</button>
       <button class="ghost icon" id="wb-theme" title="Design umschalten"></button>
       <button class="ghost icon" id="wb-set" title="Einstellungen" aria-label="Einstellungen">${icon('gear', 17)}</button>
       <a class="btn ghost sm" href="/apps/konto" id="wb-user" title="Mein Konto">${icon('konto', 15)}<span></span></a>
@@ -225,7 +254,7 @@
     const setIcon = () => { tb.innerHTML = icon(themeIcon(), 17); };
     tb.onclick = cycleTheme; setIcon(); document.addEventListener('wb-theme', setIcon); document.addEventListener('wb-prefs', setIcon);
     el.querySelector('#wb-set').onclick = () => openSettings();
-    me().then(u => { el.querySelector('#wb-user span').textContent = u.shown; }).catch(() => {});
+    me().then(u => { el.querySelector('#wb-user span').textContent = u.shown; if (id !== 'ki') kiButton(el.querySelector('#wb-ki'), u, app ? app.id : ''); }).catch(() => {});
     // Eigene Namen und Symbole nachziehen, sobald die Einstellungen da sind oder sich ändern
     document.addEventListener('wb-prefs', () => { if (!app) return; const q = s => document.querySelector(s); document.title = app.t + ' · Werkbank';
       el.querySelector('.crumb b').textContent = app.t; el.querySelector('.crumb .idx').textContent = groupLabel(app.g); const ic = q('.page-head .app-ico'); if (ic) ic.innerHTML = icon(app.id, 22); });
@@ -240,5 +269,5 @@
 
   async function logout(forced) { if (forced !== true && getPrefs().confirmLogout && !window.confirm('Wirklich überall abmelden?')) return; await Store.flush(); D.forget(); try { await api('/api/auth/logout', { method: 'POST' }); } catch {} location.href = '/login?bye=1'; }
 
-  window.WB = { editForm, api, me, logout, APPS, GROUPS, groupColor, isLight, icon, themeIcon, THEMES, normalizePrefs, setPrefs, openSettings, loadScript, getPrefs, appColor, groupLabel, design: D, Store, $, $$, esc, uid, eur, num, today, ymd, parseYmd, fmtDate, daysBetween, pf, debounce, toast, download, header, applyTheme, cycleTheme, themeMode, phaseFor, PHASE_NAME };
+  window.WB = { editForm, api, me, logout, APPS, GROUPS, groupColor, isLight, icon, themeIcon, THEMES, normalizePrefs, setPrefs, openSettings, loadScript, getPrefs, appColor, groupLabel, design: D, Store, $, $$, esc, uid, eur, num, today, ymd, parseYmd, fmtDate, daysBetween, pf, debounce, toast, download, header, kiButton, applyTheme, cycleTheme, themeMode, phaseFor, PHASE_NAME };
 })();

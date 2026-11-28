@@ -33,7 +33,7 @@ const rnd = n => { const a = new Uint32Array(1), lim = Math.floor(2**32 / n) * n
 let mode = 'pw', o = { len: 20, up: 1, low: 1, dig: 1, sym: 1, amb: 1, words: 5, sep: '-', cap: 1, num: 1, pin: 6 }, cur = '', bits = 0;
 function opts() {
   const sl = (k, l, a, b) => `<label class="field"><span>${l}: <b class="mono" id="v-${k}">${o[k]}</b></span><input type="range" data-o="${k}" min="${a}" max="${b}" value="${o[k]}"></label>`;
-  const ck = (k, l) => `<label class="row" style="gap:10px;cursor:pointer"><input type="checkbox" data-c="${k}" ${o[k]?'checked':''}>${l}</label>`;
+  const ck = (k, l) => `<label class="row" style="gap:10px;cursor:pointer;flex-wrap:nowrap"><input type="checkbox" data-c="${k}" ${o[k]?'checked':''}><span>${l}</span></label>`;
   $('#opts').innerHTML = mode === 'pw' ? `<div class="label">Optionen</div>${sl('len','Länge',8,64)}${ck('up','Großbuchstaben A–Z')}${ck('low','Kleinbuchstaben a–z')}${ck('dig','Ziffern 0–9')}${ck('sym','Sonderzeichen !#$%…')}${ck('amb','Verwechselbare weglassen (l, 1, O, 0)')}`
     : mode === 'pp' ? `<div class="label">Optionen</div>${sl('words','Wörter',3,10)}<label class="field"><span>Trenner</span><select data-s="sep">${['-','.','_',' ','+'].map(s => `<option value="${s}" ${o.sep===s?'selected':''}>${s===' '?'Leerzeichen':s}</option>`).join('')}</select></label>${ck('cap','Wörter groß schreiben')}${ck('num','Eine Zahl anhängen')}<p class="faint" style="font-size:12px">Passphrasen sind leichter zu merken und trotzdem stark. Gut für das Master-Passwort deines Passwortmanagers.</p>`
     : `<div class="label">Optionen</div>${sl('pin','Stellen',4,12)}<p class="faint" style="font-size:12px">PINs sind nur sicher, wenn nach wenigen Fehlversuchen gesperrt wird.</p>`;

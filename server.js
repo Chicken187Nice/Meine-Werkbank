@@ -20,7 +20,8 @@ const DATA = process.env.DATA_DIR || path.join(__dirname, 'data');
 for (const d of ['u', 'msg/keys', 'msg/conv', 'tls', 'outfits']) fs.mkdirSync(path.join(DATA, d), { recursive: true });
 
 const APPS = ['finanzen', 'abos', 'kueche', 'gewohnheiten', 'aufgaben', 'notizen', 'countdown', 'fokus', 'lesezeichen', 'wochenbericht',
-  'berichtsheft', 'schule', 'lernen', 'tippen', 'erklaert', 'bewerbung', 'outfits', 'messenger', 'spiele', 'entscheiden', 'rechner', 'reisen', 'passwort', 'pihole', 'monitor', 'system', 'protokoll', 'docker', 'wartung', 'geraete', 'pakete', 'jellyfin'];
+  'berichtsheft', 'schule', 'lernen', 'tippen', 'erklaert', 'bewerbung', 'outfits', 'messenger', 'spiele', 'entscheiden', 'rechner', 'reisen', 'passwort', 'pihole', 'monitor', 'system', 'protokoll', 'docker', 'wartung', 'geraete', 'pakete', 'jellyfin',
+  'kalender', 'arbeitszeit', 'merkliste', 'ablage', 'devtools', 'ki'];
 const ADMIN_APPS = ['protokoll', 'docker', 'wartung', 'geraete']; // Server- und Netzdaten, fremde IPs: nie für normale Nutzer
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -697,11 +698,18 @@ on('POST', /^\/api\/admin\/users\/([a-f0-9]+)\/reset-2fa$/, (q, res, m) => { con
 on('GET', /^\/api\/admin\/audit$/, (q, res) => send(res, 200, audit.slice(-400).reverse()), adminOnly);
 
 // Daten pro Nutzer
+// Stand je Datensatz: zählt nur Änderungen, die der Server selbst vornimmt (KI-Assistent). Eine Seite, die ihre
+// Daten davor geladen hat, darf nicht darüberschreiben, sonst wäre der neue Eintrag wieder weg.
+const STAND_FILE = path.join(DATA, 'stand.json'), stand = readJSON(STAND_FILE, {});
+const standOf = (uid, key) => stand[uid + '/' + key] || 0;
+const mark = (uid, key) => { stand[uid + '/' + key] = Math.max(Date.now(), standOf(uid, key) + 1); writeJSON(STAND_FILE, stand); };
 const keyApp = k => k === 'hub' || k === 'cockpit' || k === 'ui' || k === 'uibild' ? true : APPS.includes(k) ? k : null;
 on('GET', /^\/api\/data\/([a-z0-9_-]{1,40})$/, (q, res, m) => { const a = keyApp(m[1]); if (!a || (a !== true && !canApp(q.u, a))) return err(res, 403, 'Kein Zugriff');
-  const f = path.join(userDir(q.u.id), m[1] + '.json'); send(res, 200, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : 'null'); }); // noch nichts gespeichert ist kein Fehler
+  const f = path.join(userDir(q.u.id), m[1] + '.json'); res.setHeader('X-WB-Stand', standOf(q.u.id, m[1])); send(res, 200, fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : 'null'); }); // noch nichts gespeichert ist kein Fehler
 on('PUT', /^\/api\/data\/([a-z0-9_-]{1,40})$/, async (q, res, m) => { const a = keyApp(m[1]); if (!a || (a !== true && !canApp(q.u, a))) return err(res, 403, 'Kein Zugriff');
-  const v = await json(q.req); writeJSON(path.join(userDir(q.u.id), m[1] + '.json'), v); send(res, 200, { ok: true }); });
+  const v = await json(q.req), seen = q.req.headers['x-wb-stand'];
+  if (seen !== undefined && !(Number(seen) >= standOf(q.u.id, m[1]))) return err(res, 409, 'Diese Seite war nicht mehr aktuell', { hint: 'Inzwischen wurde über den KI-Assistenten etwas eingetragen.' });
+  writeJSON(path.join(userDir(q.u.id), m[1] + '.json'), v); send(res, 200, { ok: true }); });
 on('GET', /^\/api\/backup$/, (q, res) => { const out = {}; const d = userDir(q.u.id); if (fs.existsSync(d)) for (const f of fs.readdirSync(d)) if (f.endsWith('.json')) out[f.slice(0, -5)] = readJSON(path.join(d, f), null);
   res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Disposition': `attachment; filename="werkbank-${q.u.name}.json"`, ...SEC }); res.end(JSON.stringify(out, null, 1)); });
 on('POST', /^\/api\/backup$/, async (q, res) => { const o = await json(q.req); let n = 0; for (const [k, v] of Object.entries(o)) { const a = keyApp(k); if (a && (a === true || canApp(q.u, a))) { writeJSON(path.join(userDir(q.u.id), k + '.json'), v); n++; } } send(res, 200, { ok: true, restored: n }); });
@@ -906,7 +914,7 @@ on('GET', /^\/api\/docker$/, (q, res) => { const d = hostData('docker', 5);
 
 // Updates & Backups
 const BACKUP_DAYS = 7, DISK_WARN = 85;
-on('GET', /^\/api\/wartung$/, (q, res) => {
+function wartungData() {
   const d = hostData('system', 10), w = [], add = (text, sub, val, bad) => w.push({ text, sub, val, bad: !!bad });
   if (d.stale) add('Keine aktuellen Serverdaten', STALE_TEXT, '?', true);
   if (!d.missing) {
@@ -919,8 +927,9 @@ on('GET', /^\/api\/wartung$/, (q, res) => {
     else if (a.count) add('Updates stehen an', 'apt', a.count);
     if (d.reboot) add('Neustart des Servers nötig', 'nach Updates', '↻');
   }
-  send(res, 200, { ...d, backupDays: BACKUP_DAYS, diskWarn: DISK_WARN, warnings: w });
-}, { app: 'wartung', admin: true });
+  return { ...d, backupDays: BACKUP_DAYS, diskWarn: DISK_WARN, warnings: w };
+}
+on('GET', /^\/api\/wartung$/, (q, res) => send(res, 200, wartungData()), { app: 'wartung', admin: true });
 
 // Heimnetz-Geräte: bekannte Geräte merken, neue melden
 const DEV_FILE = path.join(DATA, 'geraete.json');
@@ -1039,6 +1048,26 @@ on('GET', /^\/api\/cockpit$/, async (q, res) => {
 
 // ---------- Jellyfin ----------
 jf = require('./jellyfin.js')({ on, send, err, json, SEC, DATA, log, ipOf, viaProxy, lockLeft, recordFail, clearFails, slow, findUser });
+
+// ---------- KI-Assistent ----------
+// Was die KI über den Server erfahren darf. Wer davon etwas sieht, entscheidet ki.js nach den Freigaben des Kontos.
+// Zugangsdaten aus den Einstellungen sind hier bewusst nicht dabei.
+require('./ki.js')({ on, send, err, json, SEC, PUB, canApp, userDir, readJSON, writeJSON, mark, shared: {
+  system: () => systemInfo(),
+  pihole: () => piholeStatus(),
+  monitor: () => ({ targets: monTargets(), state: monState }),
+  docker: () => { const d = hostData('docker', 5); return { stale: d.stale, containers: (d.containers || []).map(c => ({ name: c.name, state: c.state, problem: dockerProblem(c) })) }; },
+  wartung: () => wartungData(),
+  geraete: () => { const d = syncDevices(); return Object.values(devs.list).map(g => ({ name: g.name, host: g.host, ip: g.ip, last: g.last, known: g.known, online: !d.stale && g.last === devs.scan })); },
+  // Namen, Zeiten und Adressen nur vom fragenden Konto; von allen anderen bloß Anzahlen
+  protokoll: u => { const all = readLog(LOGIN_FILE).sort((a, b) => b.t - a.t), day = all.filter(e => e.t > Date.now() - 864e5);
+    const mine = [u.name, u.display].filter(Boolean).map(foldName);
+    return { ok: day.filter(e => LOGIN_OK.includes(e.r)).length, failed: day.filter(e => !LOGIN_OK.includes(e.r) && !LOGIN_WAIT.includes(e.r)).length,
+      locks: activeLocks().length, eigene: all.filter(e => mine.includes(foldName(e.name))).slice(0, 15).map(e => ({ t: e.t, r: e.r, ip: e.ip })) }; },
+  // Namen der übrigen Konten: nur damit ki.js Fragen nach deren Einträgen erkennt, sie gehen nie ans Modell
+  andere: u => users.filter(x => x.id !== u.id).flatMap(x => [x.name, x.display]).filter(Boolean),
+  outfits: () => readJSON(path.join(OUT_DIR, isoWeek(new Date()), 'week.json'), null)
+} });
 
 // ---------- Seiten ----------
 const MSG_HEADERS = { 'Permissions-Policy': 'camera=(), microphone=(self), geolocation=(self)',

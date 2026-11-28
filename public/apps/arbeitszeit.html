@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/kalender-lib.js"></script>
+<title>Arbeitszeit</title>
+<style>
+  .clockbox { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .clockbox .big { font: 700 clamp(48px, 9vw, 76px)/1 var(--f-mono); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .clockbox .row { justify-content: center; } .clockbox button { padding: 13px 22px; font-size: 15px; }
+  .wk { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .wk th { text-align: left; font: 600 11px var(--f-mono); color: var(--mute); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .wk td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  .wk td.r, .wk th.r { text-align: right; font-family: var(--f-mono); white-space: nowrap; }
+  .wk tr.heute td { background: color-mix(in srgb, var(--acc) 9%, transparent); }
+  .wk tr.frei td { color: var(--faint); }
+  .scroll { overflow-x: auto; }
+  .days { display: flex; gap: 6px; flex-wrap: wrap; } .days label { display: flex; gap: 5px; align-items: center; font-size: 13px; }
+  @media (max-width: 600px) { .wk .opt { display: none; } .wk td, .wk th { padding: 8px 5px; } }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Ausbildung</div><h1>Arbeitszeit</h1><p>Ein- und ausstempeln, Pausen mitschreiben und sehen, wie dein Stundenkonto steht. Nur für dich, ersetzt nicht die Zeiterfassung im Betrieb.</p></div>
+    <div class="row"><button id="csv">Als CSV speichern</button><button id="cfgB">Einstellungen</button></div>
+  </div>
+  <div class="g2" style="align-items:stretch;margin-bottom:14px">
+    <div class="panel clockbox"><div class="label" id="state"></div><div class="big" id="live">0:00</div><div class="mute" style="font-size:13px" id="info"></div><div class="row" id="btns"></div><div class="notice warn hide" id="warn" role="status"></div></div>
+    <div class="g2" id="stats"></div>
+  </div>
+  <div class="panel">
+    <div class="row between" style="margin-bottom:10px"><h3 id="wkT"></h3><div class="row" style="gap:6px"><button class="sm" id="prev" aria-label="Vorige Woche">‹</button><button class="sm" id="cur">Diese Woche</button><button class="sm" id="next" aria-label="Nächste Woche">›</button></div></div>
+    <div class="scroll"><table class="wk"><thead><tr><th>Tag</th><th>Art</th><th class="r">Von</th><th class="r">Bis</th><th class="r opt">Pause</th><th class="r">Gearbeitet</th><th class="r">±</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <p class="faint" style="font-size:12px;margin-top:10px">Stundenkonto: Es zählen nur eingetragene, abgeschlossene Tage. Urlaub, Krank und Feiertag zählen wie gearbeitet, „Zeitausgleich“ baut Plusstunden ab.</p>
+  </div>
+</main>
+<dialog id="cfg"><form method="dialog" class="stack" id="cfgF"><h3>Einstellungen</h3>
+  <div class="fields"><label class="field"><span>Wochenstunden laut Vertrag</span><input name="week" type="number" min="1" max="60" step="0.25" required></label>
+    <label class="field"><span>Startstand Stundenkonto (Stunden, auch negativ)</span><input name="start" type="number" step="0.25"></label></div>
+  <div><div class="label" style="margin-bottom:8px">Arbeitstage</div><div class="days" id="cfgDays"></div></div>
+  <label class="field"><span>Bundesland (für Feiertage)</span><select name="land"></select></label>
+  <label class="row" style="gap:10px"><input type="checkbox" name="jung"> Ich bin unter 18 (strengere Pausen- und Höchstzeiten)</label>
+  <div class="row end"><button value="cancel" class="ghost" formnovalidate>Abbrechen</button><button value="ok" class="primary">Speichern</button></div></form></dialog>
+<script>
+WB.header('arbeitszeit');
+const { $, $$, esc, ymd, Store, toast } = WB, K = WBKalender;
+const ART = [['betrieb', 'Betrieb'], ['schule', 'Berufsschule'], ['urlaub', 'Urlaub'], ['krank', 'Krank'], ['feiertag', 'Feiertag'], ['frei', 'Zeitausgleich']];
+const art = k => (ART.find(a => a[0] === k) || ART[0])[1];
+let D = { cfg: { week: 40, days: [1, 2, 3, 4, 5], land: 'BY', start: 0, jung: false }, days: {} }, mo;
+const save = () => Store.set('arbeitszeit', D);
+const monday = d => K.plus(d, -((d.getDay() + 6) % 7));
+const mins = s => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+const hm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+const dur = m => { const a = Math.round(Math.abs(m)); return `${m < 0 && a ? '−' : ''}${Math.floor(a / 60)}:${String(a % 60).padStart(2, '0')}`; };
+const plus = m => (Math.round(m) > 0 ? '+' : '') + dur(m);
+// Soll eines Tages in Minuten
+const target = s => D.cfg.days.includes(K.day(s).getDay()) && !K.feiertag(s, D.cfg.land) ? D.cfg.week * 60 / (D.cfg.days.length || 1) : 0;
+const running = r => !!(r && r.from && !r.to);
+// Länge der Pause, die gerade läuft
+const openPause = (r, now = Date.now()) => r.ps ? Math.max(0, (now - r.ps) / 60000) : 0;
+function worked(s, now = new Date()) {
+  const r = D.days[s]; if (!r) return 0;
+  if (['urlaub', 'krank', 'feiertag'].includes(r.type)) return target(s);
+  if (r.type === 'frei') return 0;
+  if (!r.from) return r.type === 'schule' ? target(s) : 0;
+  let end = r.to ? mins(r.to) : s === ymd(now) ? now.getHours() * 60 + now.getMinutes() : null; if (end === null) return 0;
+  if (end < mins(r.from)) end += r.to ? 1440 : 0; // Schicht über Mitternacht
+  return Math.max(0, end - mins(r.from) - (r.pause || 0) - openPause(r, now.getTime()));
+}
+const missing = s => running(D.days[s]) && s < ymd(new Date()); // „Gehen“ vergessen
+const counted = s => D.days[s] && !missing(s) && !(s >= ymd(new Date()) && (running(D.days[s]) || s > ymd(new Date())));
+const saldo = list => list.filter(counted).reduce((a, s) => a + worked(s) - target(s), 0);
+// Gesetzliche Mindestpause und Höchstzeit
+function law(w) { const j = D.cfg.jung; return { pause: j ? (w > 360 ? 60 : w > 270 ? 30 : 0) : (w > 540 ? 45 : w > 360 ? 30 : 0), max: j ? 480 : 600 }; }
+function render() {
+  const now = new Date(), t = ymd(now), r = D.days[t], on = running(r), pausing = on && !!r.ps, w = worked(t, now), soll = target(t);
+  $('#state').textContent = pausing ? 'Pause' : on ? 'Du arbeitest' : r?.to ? 'Feierabend' : 'Nicht eingestempelt';
+  $('#live').textContent = dur(pausing ? openPause(r) : w); $('#live').className = 'big ' + (pausing ? 'warn' : on ? 'acc' : '');
+  const holiday = K.feiertag(t, D.cfg.land), rest = soll - w;
+  $('#info').textContent = pausing ? `Pause seit ${hm(new Date(r.ps))} Uhr · gearbeitet ${dur(w)}`
+    : on ? `Seit ${r.from} Uhr · Pause ${dur(r.pause || 0)}` + (soll ? rest > 0 ? ` · Soll erreicht gegen ${hm(new Date(now.getTime() + (rest + Math.max(0, law(soll).pause - (r.pause || 0))) * 60000))} Uhr` : ` · Soll erreicht, ${plus(-rest)} drüber` : '')
+    : r?.to ? `${r.from} bis ${r.to} Uhr · Pause ${dur(r.pause || 0)} · Soll ${dur(soll)}`
+    : holiday ? `Heute ist ${holiday}.` : soll ? `Soll heute: ${dur(soll)} Stunden` : 'Heute ist kein Arbeitstag.';
+  $('#btns').innerHTML = pausing ? '<button class="primary" data-a="weiter">Pause beenden</button><button data-a="gehen">Gehen</button>'
+    : on ? '<button data-a="pause">Pause</button><button class="primary" data-a="gehen">Gehen</button>'
+    : `<button class="primary" data-a="kommen">${r?.to ? 'Wieder einstempeln' : 'Kommen'}</button>`;
+  const l = law(w), note = [];
+  if (r && r.from && l.pause > (r.pause || 0) + openPause(r)) note.push(`Ab ${dur(w)} Stunden sind mindestens ${l.pause} Minuten Pause vorgeschrieben.`);
+  if (r && w > l.max) note.push(`Mehr als ${l.max / 60} Stunden an einem Tag sind ${D.cfg.jung ? 'unter 18 ' : ''}nicht erlaubt.`);
+  const forgot = Object.keys(D.days).filter(missing).sort(); if (forgot.length) note.push(`Bei ${forgot.map(s => K.day(s).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })).join(', ')} fehlt „Gehen“. Trag die Zeit unten nach.`);
+  $('#warn').textContent = note.join(' '); $('#warn').classList.toggle('hide', !note.length);
+  const start = monday(now), thisWeek = [...Array(7)].map((_, i) => ymd(K.plus(start, i))), month = Object.keys(D.days).filter(s => s.startsWith(t.slice(0, 7)));
+  const wSum = thisWeek.reduce((a, s) => a + worked(s, now), 0), wSoll = thisWeek.reduce((a, s) => a + target(s), 0), total = saldo(Object.keys(D.days)) + (D.cfg.start || 0) * 60;
+  const stat = (k, v, s, c = '') => `<div class="panel stat"><div class="label">${k}</div><div class="v ${c}">${v}</div><div class="s">${s}</div></div>`;
+  $('#stats').innerHTML = stat('Diese Woche', dur(wSum), `von ${dur(wSoll)} Stunden<div class="bar" style="margin-top:8px"><i style="width:${wSoll ? Math.min(100, wSum / wSoll * 100) : 0}%"></i></div>`)
+    + stat('Stundenkonto', plus(total), total >= 0 ? 'Plusstunden' : 'Minusstunden', total < 0 ? 'bad' : 'good')
+    + stat('Dieser Monat', dur(month.reduce((a, s) => a + worked(s, now), 0)), `${plus(saldo(month))} zum Soll`)
+    + stat('Urlaubstage', String(Object.entries(D.days).filter(([s, x]) => x.type === 'urlaub' && s.startsWith(t.slice(0, 4)) && target(s)).length), `eingetragen ${t.slice(0, 4)}`);
+  week();
+}
+function week() {
+  const t = ymd(new Date()), days = [...Array(7)].map((_, i) => ymd(K.plus(mo, i)));
+  $('#wkT').textContent = `${mo.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })} bis ${K.plus(mo, 6).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+  $('#rows').innerHTML = days.map(s => { const r = D.days[s], f = K.feiertag(s, D.cfg.land), w = worked(s), d = counted(s) ? plus(w - target(s)) : '';
+    return `<tr class="${s === t ? 'heute' : ''} ${!r && !target(s) ? 'frei' : ''}" data-day="${s}"><td><b>${K.day(s).toLocaleDateString('de-DE', { weekday: 'short' })}</b> ${K.day(s).getDate()}.${f ? `<div class="faint" style="font-size:11px">${esc(f)}</div>` : ''}</td>
+      <td>${r ? art(r.type) + (r.note ? `<div class="faint" style="font-size:11px">${esc(r.note)}</div>` : '') : ''}</td><td class="r">${esc(r?.from || '')}</td><td class="r">${missing(s) ? '<span class="bad">fehlt</span>' : esc(r?.to || '')}</td><td class="r opt">${r?.pause ? dur(r.pause) : ''}</td>
+      <td class="r">${r ? dur(w) : ''}</td><td class="r ${d.startsWith('−') ? 'bad' : d.startsWith('+') ? 'good' : ''}">${d}</td><td class="r"><button class="ghost sm" data-ed="${s}" aria-label="${K.day(s).toLocaleDateString('de-DE')} bearbeiten">✎</button></td></tr>`; }).join('');
+}
+function stamp(a) {
+  const now = new Date(), t = ymd(now); let r = D.days[t];
+  if (a === 'kommen') {
+    if (r?.to) { r.pause = (r.pause || 0) + Math.max(0, now.getHours() * 60 + now.getMinutes() - mins(r.to)); r.to = ''; toast('Wieder eingestempelt, die Unterbrechung zählt als Pause'); }
+    else { r = D.days[t] = { type: r?.type === 'schule' ? 'schule' : 'betrieb', from: hm(now), to: '', pause: 0, note: r?.note || '' }; toast('Eingestempelt um ' + r.from + ' Uhr'); }
+  } else if (!r || !running(r)) return;
+  else if (a === 'pause') { r.ps = Date.now(); toast('Pause gestartet'); }
+  else { if (r.ps) { r.pause = (r.pause || 0) + Math.round(openPause(r)); delete r.ps; } if (a === 'gehen') { r.to = hm(now); toast(`Ausgestempelt um ${r.to} Uhr, ${dur(worked(t))} Stunden gearbeitet`); } else toast('Pause beendet'); }
+  save(); render();
+}
+async function edit(s) {
+  const r = D.days[s] || { type: 'betrieb', from: '', to: '', pause: 0, note: '' };
+  const v = await WB.editForm(K.day(s).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' }), [
+    { k: 'type', l: 'Art', type: 'select', v: r.type, opts: ART }, { k: 'from', l: 'Von', type: 'time', v: r.from }, { k: 'to', l: 'Bis', type: 'time', v: r.to },
+    { k: 'pause', l: 'Pause in Minuten', type: 'number', v: Math.round(r.pause || 0) }, { k: 'note', l: 'Notiz', v: r.note || '' }], { danger: D.days[s] ? 'Tag löschen' : null });
+  if (!v) return;
+  if (v === 'delete') delete D.days[s];
+  else { const timed = v.type === 'betrieb' || v.type === 'schule';
+    if (v.type === 'betrieb' && !v.from) return toast('Nicht gespeichert: Bei „Betrieb“ fehlt die Uhrzeit bei „Von“');
+    if (timed && !v.from && v.to) return toast('Nicht gespeichert: „Von“ fehlt');
+    if (timed && v.from && !v.to && s !== ymd(new Date())) return toast('Nicht gespeichert: „Bis“ fehlt');
+    D.days[s] = { type: v.type, from: timed ? v.from : '', to: timed ? v.to : '', pause: timed ? Math.max(0, Math.min(600, v.pause || 0)) : 0, note: v.note };
+    if (timed && v.from && !v.to && r.ps) D.days[s].ps = r.ps; }
+  save(); render();
+}
+function csv() {
+  const days = Object.keys(D.days).sort(); if (!days.length) return toast('Noch nichts eingetragen');
+  // Zellen, die mit = + - @ anfangen, würde die Tabellenkalkulation als Formel ausführen
+  const cell = v => { v = String(v ?? ''); if (/^[=+\-@\t\r]/.test(v)) v = "'" + v; return /[;"\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const dez = m => (m / 60).toFixed(2).replace('.', ',');
+  const rows = [['Datum', 'Art', 'Von', 'Bis', 'Pause (Min)', 'Gearbeitet (Std)', 'Soll (Std)', 'Notiz'], ...days.map(s => { const r = D.days[s]; return [K.day(s).toLocaleDateString('de-DE'), art(r.type), r.from, r.to, Math.round(r.pause || 0), dez(worked(s)), dez(target(s)), r.note]; })];
+  WB.download('arbeitszeit.csv', '﻿' + rows.map(r => r.map(cell).join(';')).join('\r\n'), 'text/csv'); toast(days.length + ' Tage gespeichert');
+}
+$('#btns').onclick = e => { const b = e.target.closest('[data-a]'); if (b) stamp(b.dataset.a); };
+$('#rows').onclick = e => { const b = e.target.closest('[data-ed]'); if (b) edit(b.dataset.ed); };
+$('#prev').onclick = () => { mo = K.plus(mo, -7); week(); }; $('#next').onclick = () => { mo = K.plus(mo, 7); week(); }; $('#cur').onclick = () => { mo = monday(K.day(ymd(new Date()))); week(); };
+$('#csv').onclick = csv;
+$('#cfgB').onclick = () => { const f = $('#cfgF'), c = D.cfg; f.week.value = c.week; f.start.value = c.start || 0; f.jung.checked = c.jung;
+  f.land.innerHTML = K.LAENDER.map(([k, n]) => `<option value="${k}" ${k === c.land ? 'selected' : ''}>${n}</option>`).join('');
+  $('#cfgDays').innerHTML = [1, 2, 3, 4, 5, 6, 0].map(d => `<label><input type="checkbox" value="${d}" ${c.days.includes(d) ? 'checked' : ''}>${['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'][d]}</label>`).join('');
+  $('#cfg').returnValue = ''; $('#cfg').showModal(); };
+$('#cfg').addEventListener('close', () => { if ($('#cfg').returnValue !== 'ok') return; const f = $('#cfgF'), days = $$('#cfgDays input:checked').map(i => +i.value);
+  if (!days.length) return toast('Nicht gespeichert: Wähle mindestens einen Arbeitstag');
+  D.cfg = { week: Math.min(60, Math.max(1, +f.week.value || 40)), start: +f.start.value || 0, land: f.land.value, jung: f.jung.checked, days }; save(); render(); toast('Gespeichert'); });
+(async () => { const d = await Store.get('arbeitszeit', D); D = { cfg: { ...D.cfg, ...d.cfg }, days: d.days || {} }; mo = monday(K.day(ymd(new Date()))); render(); setInterval(render, 15000); })();
+</script>
+</body></html>

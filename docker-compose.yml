@@ -23,6 +23,11 @@ services:
       - WB_TRUST_PROXY=${WB_TRUST_PROXY:-0}
       # Jellyfin auf demselben Server. Nur die Werkbank spricht mit dieser Adresse, nie der Browser.
       - WB_JELLYFIN_URL=${WB_JELLYFIN_URL:-http://host.docker.internal:8096}
+      # Lokale KI (Dienst "ollama" unten). Das erste Modell, das vorausgewählt ist:
+      - WB_OLLAMA_URL=${WB_OLLAMA_URL:-http://ollama:11434}
+      - WB_KI_MODEL=${WB_KI_MODEL:-qwen3.5:4b}
+      # Gleiche Grenze wie beim Dienst "ollama": höchstens 75 % der Prozessorkerne (3 von 4)
+      - WB_KI_CPUS=${WB_KI_CPUS:-3}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
@@ -48,6 +53,27 @@ services:
     depends_on: [werkbank]
     restart: unless-stopped
 
+  # ---- Optional: lokale KI. Einrichten mit  bash ki-einrichten.sh ----
+  # Bewusst ohne "ports": Ollama hat keine Anmeldung und ist nur für die anderen Dienste hier erreichbar.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ki"]
+    container_name: werkbank-ollama
+    volumes:
+      - ollama-modelle:/root/.ollama
+    environment:
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_KEEP_ALIVE=15m
+      - OLLAMA_NO_CLOUD=1
+    # Obergrenzen, damit der Rest des Servers nicht ausgebremst wird
+    cpus: ${WB_KI_CPUS:-3}
+    mem_limit: ${WB_KI_RAM:-10g}
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
 volumes:
   werkbank-daten:
   caddy-daten:
+  ollama-modelle:

@@ -2,7 +2,7 @@
 
 > This project was built with Claude (Anthropic).
 
-**A self-hosted personal dashboard in Docker:** one start page with 25+ small apps for everyday life, apprenticeship, homelab and more. Every app sits behind one login with single sign-on and per-user permissions. 2FA, brute-force protection and an end-to-end encrypted messenger are built in.
+**A self-hosted personal dashboard in Docker:** one start page with 35+ small apps for everyday life, apprenticeship, homelab and more. Every app sits behind one login with single sign-on and per-user permissions. 2FA, brute-force protection and an end-to-end encrypted messenger are built in.
 
 Zero-dependency Node.js · one container · runs on a laptop or a home server.
 
@@ -26,11 +26,11 @@ The user interface is in **German**. The detailed German manual is in [ANLEITUNG
 
 | Group | Apps |
 |---|---|
-| **Everyday** | Finances & savings goals · Subscriptions · Kitchen · Habits |
-| **Organisation** | Kanban tasks · Notes · Countdowns · Focus timer · Bookmarks · Travel planner |
-| **Apprenticeship** | Training log (Berichtsheft) · School grades · Weekly summary of the news (RSS) · **C# trainer for Java developers** · Typing trainer · Explainers · Job applications |
+| **Everyday** | Finances & savings goals · Subscriptions · Kitchen · Habits · Parcels |
+| **Organisation** | **Calendar** · Kanban tasks · Notes · Countdowns · Focus timer · Bookmarks · Travel planner |
+| **Apprenticeship** | Training log (Berichtsheft) · School grades · Weekly summary of the news (RSS) · **C# trainer for Java developers** · Typing trainer · Explainers · Job applications · **Time clock** |
 | **Style & Social** | **Weekly outfits** · **E2E-encrypted messenger** |
-| **Leisure & Tools** | Jellyfin · Mini games · Decision helper · Calculator · Password generator |
+| **Leisure & Tools** | Jellyfin · Watch & reading list · Mini games · Decision helper · Calculator · Password generator · Clipboard · **Developer tools** · **Local AI assistant** |
 | **Tech** | **Pi-hole** stats & warnings · **Uptime monitor** (HTTP/TCP/TLS) · System info |
 
 #### Highlights
@@ -43,6 +43,11 @@ The user interface is in **German**. The detailed German manual is in [ANLEITUNG
 - **Outfits:** 6 new urban looks every Monday (slim top, baggy pants) in black & white or black & red. They come from real shop products with images and direct product links. Old weeks are deleted automatically.
 - **Messenger:** messages, files and voice notes are encrypted in the browser (ECDH P-256 + HKDF + AES-GCM, signed with ECDSA). The server only ever stores ciphertext. Replies, reactions, editing, read receipts.
 - **Jellyfin:** browse and play your own Jellyfin library through the dashboard. The Jellyfin token stays on the server.
+- **Local AI assistant (optional):** a language model running on your own machine via Ollama. Ask it from its own page or from the button in the header of any page. It answers general questions and questions about your entries and your server. The server selects the data **before** the question is asked, using the same permissions as the apps, and only from the asking user's own folder. The model has no tools and cannot read anything else. It can also prepare entries (calendar, tasks, notes, shopping list, expenses and more); nothing is saved until you confirm. Limited to 75 % of the CPU. Set up with `bash ki-einrichten.sh` (downloads several GB).
+- **Calendar:** own and recurring events, public holidays for all 16 German states, plus due tasks, countdowns, trips and cancellation deadlines from the other apps. Export as `.ics`.
+- **Time clock:** clock in and out, breaks, overtime balance, legal break warnings, CSV export.
+- **Clipboard:** pass texts and links between phone and PC.
+- **Developer tools:** JSON, Base64/URL/hex, Unix time, regex tester, hashes and UUIDs, JWT, colours and contrast, number bases, text diff. Everything runs in the browser.
 - **C# trainer:** learn C# coming from Java, with side-by-side comparisons, quizzes and your own flashcards.
 
 ---
@@ -121,6 +126,10 @@ Settings live in a `.env` file next to `docker-compose.yml`. `start.sh` creates 
 | `WB_TRUST_PROXY` | `0` | Set to `1` when running behind Caddy |
 | `WB_PUBLIC_BIND` | `127.0.0.1` | Address for ports 80/443 of Caddy. `0.0.0.0` if your router forwards to this machine |
 | `WB_PROXY_ALLOW` | `172.16.0.0/12` | Networks that may send a PROXY protocol header (real visitor IP from a tunnel) |
+| `WB_KI` | *(unset)* | `1` starts the Ollama container with `start.sh` (set by `ki-einrichten.sh`) |
+| `WB_KI_MODEL` | `qwen3.5:4b` | Preselected model of the AI assistant |
+| `WB_KI_CPUS` / `WB_KI_RAM` | `3` / `10g` | Resource limits of the Ollama container. `ki-einrichten.sh` sets the CPU value to 75 % of the host's cores |
+| `WB_OLLAMA_URL` | `http://ollama:11434` | Address of Ollama |
 | `WB_JELLYFIN_URL` | `http://host.docker.internal:8096` | Your Jellyfin server |
 | `WB_MSG_QUOTA_MB` | `300` | Attachment storage per user in the messenger |
 
@@ -153,6 +162,8 @@ All data lives in the Docker volume `werkbank_werkbank-daten`.
 ```
 ├── server.js            # backend (auth, API, HTTPS) – no npm dependencies
 ├── jellyfin.js          # Jellyfin proxy
+├── ki.js                # AI assistant: permissions, data selection, Ollama
+├── ki-eintragen.js      # AI assistant: proposes entries, validates and saves them after a click
 ├── bericht.js           # weekly report: groups and summarises news
 ├── werkzeug/skins.py    # draws the template backgrounds (public/assets/skins.css)
 ├── host/sammeln.py      # collects server data for the cockpit (cron)

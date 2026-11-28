@@ -18,6 +18,9 @@
 !/server.js
 !/jellyfin.js
 !/bericht.js
+!/ki.js
+!/ki-eintragen.js
+!/ki-einrichten.sh
 !/werkzeug/*.py
 !/start.sh
 !/stop.sh

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script><script src="/assets/kalender-lib.js"></script>
+<title>Kalender</title>
+<style>
+  .cal { display: grid; grid-template-columns: 30px repeat(7, minmax(0,1fr)); gap: 4px; }
+  .cal .h { text-align: center; font: 600 11px var(--f-mono); color: var(--mute); padding: 4px 0; }
+  .cal .wk { display: grid; place-items: center; font: 500 10px var(--f-mono); color: var(--faint); }
+  .cal button.d { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 3px; min-height: 92px; padding: 5px; background: var(--bg); border-color: var(--line); text-align: left; white-space: normal; overflow: hidden; min-width: 0; font-weight: 500; }
+  .cal button.d.aus { opacity: .4; }
+  .cal button.d.frei { background: color-mix(in srgb, var(--warn) 9%, var(--bg)); }
+  .cal button.d.we { background: color-mix(in srgb, var(--text) 3%, var(--bg)); }
+  .cal button.d.heute { border-color: var(--acc); box-shadow: inset 0 0 0 1px var(--acc); }
+  .cal button.d.sel { background: color-mix(in srgb, var(--acc) 18%, var(--bg)); border-color: var(--acc); }
+  .cal .n { font: 700 13px var(--f-mono); }
+  .cal .fn { font-size: 10px; color: var(--warn); line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal .ev { font-size: 11px; line-height: 1.35; padding: 0 5px; border-radius: 4px; background: color-mix(in srgb, var(--ec) 22%, var(--bg2)); border-left: 3px solid var(--ec); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal .dots { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .cal .mehr { font-size: 10px; color: var(--mute); }
+  .mark { width: 10px; height: 10px; border-radius: 3px; background: var(--ec); flex: none; }
+  .layout { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 14px; align-items: start; }
+  .layout > * { min-width: 0; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0,1fr); } }
+  @media (max-width: 640px) {
+    .cal { grid-template-columns: repeat(7, minmax(0,1fr)); gap: 3px; } .cal .wk, .cal .h:first-child { display: none; }
+    .cal button.d { min-height: 52px; padding: 3px; align-items: center; }
+    .cal .fn, .cal .mehr { display: none; } .cal .dots { flex-direction: row; gap: 2px; flex-wrap: wrap; justify-content: center; }
+    .cal .ev { width: 6px; height: 6px; padding: 0; border: 0; border-radius: 50%; background: var(--ec); font-size: 0; flex: none; }
+  }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Organisation</div><h1>Kalender</h1><p>Deine Termine zusammen mit Feiertagen, fälligen Aufgaben, Countdowns, Reisen und Kündigungsfristen aus den anderen Kacheln.</p></div>
+    <div class="row"><select id="land" aria-label="Bundesland für Feiertage" style="width:auto"></select><button id="ics">Als .ics speichern</button><button class="primary" id="add">+ Termin</button></div>
+  </div>
+  <div class="layout">
+    <div class="panel">
+      <div class="row between" style="margin-bottom:12px"><h3 id="title"></h3><div class="row" style="gap:6px"><button class="sm" id="prev" aria-label="Voriger Monat">‹</button><button class="sm" id="now">Heute</button><button class="sm" id="next" aria-label="Nächster Monat">›</button></div></div>
+      <div class="cal" id="cal"></div>
+      <div class="row" id="legend" style="margin-top:12px;gap:14px;font-size:12px"></div>
+    </div>
+    <div class="stack">
+      <div class="panel"><div class="panel-h"><span class="label" id="dayT"></span><button class="sm" id="addDay">+ hier</button></div><div class="list" id="day"></div></div>
+      <div class="panel"><div class="label" style="margin-bottom:10px">Als Nächstes (30 Tage)</div><div class="list" id="soon"></div></div>
+    </div>
+  </div>
+</main>
+<script>
+WB.header('kalender');
+const { $, esc, uid, ymd, api, Store, toast, icon } = WB, K = WBKalender;
+const FARBEN = [['blau', 'Blau', '#5aa9ff'], ['gruen', 'Grün', '#3ddc97'], ['gelb', 'Gelb', '#ffbd4a'], ['rot', 'Rot', '#ff5a6e'], ['lila', 'Lila', '#a78bfa'], ['tuerkis', 'Türkis', '#3cc8d8']];
+const farbe = k => (FARBEN.find(f => f[0] === k) || FARBEN[0])[2];
+const APPF = { aufgaben: ['Aufgabe', '#a78bfa'], countdown: ['Countdown', '#3cc8d8'], reisen: ['Reise', '#3ddc97'], abos: ['Abo-Frist', '#ff5a6e'] };
+let D = { events: [], land: 'BY' }, fremd = {}, mon = new Date(), sel = ymd(new Date());
+mon = new Date(mon.getFullYear(), mon.getMonth(), 1, 12);
+const save = () => Store.set('kalender', D);
+// Alle Einträge zwischen zwei Tagen, nach Datum: eigene Termine und die aus anderen Kacheln
+function entries(von, bis) {
+  const m = {}, add = (s, x) => (m[s] = m[s] || []).push(x);
+  for (const e of D.events) for (const s of K.tage(e, von, bis)) add(s, { t: e.t, time: e.time || '', c: farbe(e.c), ev: e });
+  for (const f of K.fremde(fremd, von, bis)) add(f.date, { t: f.t, time: '', c: APPF[f.app][1], app: f.app });
+  for (const l of Object.values(m)) l.sort((a, b) => (a.time || '99').localeCompare(b.time || '99') || a.t.localeCompare(b.t));
+  return m;
+}
+const kw = d => { const x = new Date(d); x.setDate(x.getDate() + 3 - (x.getDay() + 6) % 7); const first = new Date(x.getFullYear(), 0, 4, 12); return 1 + Math.round(((x - first) / 864e5 - 3 + (first.getDay() + 6) % 7) / 7); };
+const lang = s => K.day(s).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+const item = (x, datum) => `<div class="it" style="--ec:${x.c}"><span class="mark"></span><div class="grow" style="min-width:0"><div style="font-size:14px;overflow-wrap:anywhere">${esc(x.t)}</div><div class="faint" style="font-size:12px">${[datum, x.time ? x.time + ' Uhr' : '', x.app ? APPF[x.app][0] : '', x.ev?.rep ? { weekly: 'wöchentlich', monthly: 'monatlich', yearly: 'jährlich' }[x.ev.rep] : ''].filter(Boolean).join(' · ')}${x.ev?.note ? `<br>${esc(x.ev.note)}` : ''}</div></div>
+  ${x.ev ? `<button class="ghost sm" data-ed="${x.ev.id}" aria-label="Termin bearbeiten">✎</button>` : x.app ? `<a class="btn ghost sm" href="/apps/${x.app}">öffnen</a>` : ''}</div>`;
+function render() {
+  const start = K.plus(mon, -((mon.getDay() + 6) % 7)), end = new Date(mon.getFullYear(), mon.getMonth() + 1, 0, 12);
+  const weeks = Math.ceil((Math.round((end - start) / 864e5) + 1) / 7), all = entries(ymd(start), ymd(K.plus(start, weeks * 7 - 1))), today = ymd(new Date());
+  $('#title').textContent = mon.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+  let h = '<div class="h">KW</div>' + ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map(d => `<div class="h">${d}</div>`).join('');
+  for (let w = 0; w < weeks; w++) { h += `<div class="wk">${kw(K.plus(start, w * 7))}</div>`;
+    for (let i = 0; i < 7; i++) { const d = K.plus(start, w * 7 + i), s = ymd(d), l = all[s] || [], f = K.feiertag(s, D.land);
+      h += `<button type="button" class="d ${d.getMonth() !== mon.getMonth() ? 'aus' : ''} ${i > 4 ? 'we' : ''} ${f ? 'frei' : ''} ${s === today ? 'heute' : ''} ${s === sel ? 'sel' : ''}" data-d="${s}" aria-label="${esc(lang(s))}${f ? ', ' + esc(f) : ''}, ${l.length} Einträge">
+        <span class="n">${d.getDate()}</span>${f ? `<span class="fn" title="${esc(f)}">${esc(f)}</span>` : ''}<span class="dots">${l.slice(0, 3).map(x => `<span class="ev" style="--ec:${x.c};margin:0">${esc((x.time ? x.time + ' ' : '') + x.t)}</span>`).join('')}</span>${l.length > 3 ? `<span class="mehr">+${l.length - 3} weitere</span>` : ''}</button>`; } }
+  $('#cal').innerHTML = h;
+  const one = entries(sel, sel)[sel] || [], f = K.feiertag(sel, D.land);
+  $('#dayT').textContent = lang(sel);
+  $('#day').innerHTML = (f ? `<div class="it"><span class="chip warn">Feiertag</span><span class="grow">${esc(f)}</span></div>` : '') + (one.length ? one.map(x => item(x, '')).join('') : f ? '' : '<div class="faint" style="font-size:13px;padding:6px 0">Nichts eingetragen.</div>');
+  const bis = ymd(K.plus(K.day(today), 30)), next = entries(today, bis), rows = [];
+  for (let i = 0; i <= 30; i++) { const s = ymd(K.plus(K.day(today), i)), fei = K.feiertag(s, D.land), datum = i === 0 ? 'Heute' : i === 1 ? 'Morgen' : K.day(s).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    if (fei) rows.push(item({ t: fei, c: 'var(--warn)' }, datum));
+    for (const x of next[s] || []) rows.push(item(x, datum)); }
+  $('#soon').innerHTML = rows.length ? rows.slice(0, 12).join('') + (rows.length > 12 ? `<div class="faint" style="font-size:12px;padding-top:8px">und ${rows.length - 12} weitere</div>` : '') : '<div class="faint" style="font-size:13px">Die nächsten 30 Tage sind frei.</div>';
+  $('#legend').innerHTML = Object.entries(APPF).filter(([id]) => fremd[id]).map(([, [t, c]]) => `<span class="row" style="gap:6px;--ec:${c}"><span class="mark"></span>${t}</span>`).join('') + '<span class="row" style="gap:6px;--ec:var(--warn)"><span class="mark"></span>Feiertag</span>';
+}
+async function edit(ev, date) {
+  const v = await WB.editForm(ev ? 'Termin bearbeiten' : 'Neuer Termin', [
+    { k: 't', l: 'Was?', v: ev?.t || '', req: true }, { k: 'date', l: 'Datum', type: 'date', v: ev?.date || date, req: true }, { k: 'time', l: 'Uhrzeit (leer = ganztägig)', type: 'time', v: ev?.time || '' },
+    { k: 'end', l: 'Bis (nur bei mehreren Tagen)', type: 'date', v: ev?.end || '' }, { k: 'rep', l: 'Wiederholung', type: 'select', v: ev?.rep || '', opts: [['', 'einmalig'], ['weekly', 'jede Woche'], ['monthly', 'jeden Monat'], ['yearly', 'jedes Jahr']] },
+    { k: 'until', l: 'Wiederholen bis (leer = immer)', type: 'date', v: ev?.until || '' }, { k: 'c', l: 'Farbe', type: 'select', v: ev?.c || 'blau', opts: FARBEN.map(f => [f[0], f[1]]) }, { k: 'note', l: 'Notiz', type: 'textarea', v: ev?.note || '' }], { danger: ev ? 'Löschen' : null });
+  if (!v) return;
+  if (v === 'delete') { D.events = D.events.filter(x => x !== ev); save(); render(); return toast('Termin gelöscht' + (ev.rep ? ' (alle Wiederholungen)' : '')); }
+  if (!v.t || !v.date) return toast('Titel und Datum fehlen, nichts gespeichert');
+  if (v.end && v.end < v.date) { v.end = ''; toast('Das Ende lag vor dem Anfang und wurde weggelassen'); }
+  if (ev) Object.assign(ev, v); else D.events.push({ id: uid(), ...v });
+  sel = v.date; mon = new Date(K.day(v.date).getFullYear(), K.day(v.date).getMonth(), 1, 12); save(); render();
+}
+// Kalenderdatei mit den eigenen Terminen, zum Einlesen am Handy oder in Outlook
+function ics() {
+  if (!D.events.length) return toast('Noch keine eigenen Termine zum Speichern');
+  const t = s => String(s || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1'), d = s => s.replace(/-/g, ''), stamp = new Date().toISOString().replace(/[-:]|\.\d+/g, '');
+  const body = D.events.flatMap(e => ['BEGIN:VEVENT', `UID:${e.id}@werkbank`, `DTSTAMP:${stamp}`,
+    ...(e.time && !e.end ? [`DTSTART:${d(e.date)}T${e.time.replace(':', '')}00`, 'DURATION:PT1H'] : [`DTSTART;VALUE=DATE:${d(e.date)}`, `DTEND;VALUE=DATE:${d(ymd(K.plus(K.day(e.end || e.date), 1)))}`]),
+    ...(e.rep ? [`RRULE:FREQ=${e.rep.toUpperCase()}${e.until ? ';UNTIL=' + d(e.until) + (e.time && !e.end ? 'T235959' : '') : ''}`] : []), `SUMMARY:${t(e.t)}`, ...(e.note ? [`DESCRIPTION:${t(e.note)}`] : []), 'END:VEVENT']);
+  WB.download('werkbank-termine.ics', ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Werkbank//Kalender//DE', ...body, 'END:VCALENDAR', ''].join('\r\n'), 'text/calendar');
+  toast(D.events.length + ' Termine als Datei gespeichert');
+}
+$('#add').onclick = () => edit(null, sel); $('#addDay').onclick = () => edit(null, sel); $('#ics').onclick = ics;
+const go = n => { mon = new Date(mon.getFullYear(), mon.getMonth() + n, 1, 12); sel = ymd(mon); render(); };
+$('#prev').onclick = () => go(-1); $('#next').onclick = () => go(1);
+$('#now').onclick = () => { const n = new Date(); mon = new Date(n.getFullYear(), n.getMonth(), 1, 12); sel = ymd(n); render(); };
+$('#land').innerHTML = K.LAENDER.map(([k, n]) => `<option value="${k}">Feiertage: ${n}</option>`).join('');
+$('#land').onchange = e => { D.land = e.target.value; save(); render(); };
+$('#cal').addEventListener('click', e => { const b = e.target.closest('[data-d]'); if (b) { sel = b.dataset.d; render(); $(`#cal [data-d="${sel}"]`).focus(); } });
+$('#cal').addEventListener('dblclick', e => { const b = e.target.closest('[data-d]'); if (b) edit(null, b.dataset.d); });
+document.addEventListener('click', e => { const b = e.target.closest('[data-ed]'); if (b) edit(D.events.find(x => x.id === b.dataset.ed)); });
+(async () => {
+  const [d, me] = await Promise.all([Store.get('kalender', D), WB.me()]); D = Object.assign(D, d); $('#land').value = D.land; render();
+  // Nur Kacheln abfragen, die dieses Konto auch sehen darf
+  await Promise.all(Object.keys(APPF).filter(id => me.apps.includes(id)).map(async id => { try { const v = await api('/api/data/' + id); if (v) fremd[id] = v; } catch {} }));
+  render();
+})();
+</script>
+</body></html>

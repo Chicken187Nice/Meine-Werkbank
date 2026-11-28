@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="de"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="/assets/base.css"><script src="/assets/design.js"></script><script src="/assets/core.js"></script>
+<title>Merkliste</title>
+<style>
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .m { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .m h3 { font-size: 17px; overflow-wrap: anywhere; }
+  .m.pick { border-color: var(--acc); box-shadow: 0 0 0 2px var(--acc); }
+  .stars { display: flex; gap: 0; } .stars button { background: none; border: 0; padding: 2px 3px; font-size: 18px; color: var(--faint); line-height: 1; }
+  .stars button.on { color: var(--warn); }
+  .m .foot { margin-top: auto; }
+</style>
+</head><body>
+<main class="wrap">
+  <div class="page-head">
+    <div><div class="label">Freizeit</div><h1>Merkliste</h1><p>Filme, Serien, Bücher und Spiele, die du noch vorhast, gerade anschaust oder schon durch hast.</p></div>
+    <button id="pick">Was als Nächstes?</button>
+  </div>
+  <form class="panel row" id="f" style="margin-bottom:14px">
+    <input name="t" placeholder="Titel" required maxlength="160" style="flex:2 1 220px;width:auto">
+    <select name="kind" aria-label="Art" style="flex:1 1 120px;max-width:180px;width:auto"></select>
+    <select name="status" aria-label="Stand" style="flex:1 1 120px;max-width:180px;width:auto"></select>
+    <button class="primary">Hinzufügen</button>
+  </form>
+  <div class="row between" style="margin-bottom:12px">
+    <div class="tabs" id="tabs"></div>
+    <div class="row"><div class="row" id="kinds" style="gap:6px"></div><input type="search" id="q" placeholder="Suchen …" style="width:180px"></div>
+  </div>
+  <div class="cards" id="list"></div>
+</main>
+<script>
+WB.header('merkliste');
+const { $, esc, uid, today, fmtDate, Store, toast } = WB;
+const KIND = { film: 'Film', serie: 'Serie', buch: 'Buch', spiel: 'Spiel', sonst: 'Sonstiges' };
+const ST = { offen: 'Geplant', laeuft: 'Läuft', fertig: 'Fertig' };
+let D = { items: [] }, tab = 'offen', kind = '', q = '', picked = null;
+const save = () => Store.set('merkliste', D);
+const opts = (o, sel) => Object.entries(o).map(([k, v]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${esc(v)}</option>`).join('');
+$('#f').kind.innerHTML = opts(KIND, 'film'); $('#f').status.innerHTML = opts(ST, 'offen');
+function render() {
+  const count = s => D.items.filter(i => s === 'alle' || i.status === s).length;
+  $('#tabs').innerHTML = [...Object.entries(ST), ['alle', 'Alle']].map(([k, v]) => `<button type="button" class="${tab === k ? 'on' : ''}" data-tab="${k}">${v} ${count(k)}</button>`).join('');
+  const used = [...new Set(D.items.map(i => i.kind))];
+  $('#kinds').innerHTML = used.length > 1 ? Object.keys(KIND).filter(k => used.includes(k)).map(k => `<button type="button" class="chip ${kind === k ? 'on' : ''}" data-kind="${k}">${KIND[k]}</button>`).join('') : '';
+  if (!used.includes(kind)) kind = '';
+  const needle = q.toLowerCase();
+  const l = D.items.filter(i => (tab === 'alle' || i.status === tab) && (!kind || i.kind === kind) && (!needle || (i.t + ' ' + (i.note || '') + ' ' + (i.progress || '')).toLowerCase().includes(needle)))
+    .sort((a, b) => tab === 'fertig' ? (b.done || '').localeCompare(a.done || '') : (b.added || '').localeCompare(a.added || ''));
+  $('#list').innerHTML = l.length ? l.map(i => { const k = KIND[i.kind] || KIND.sonst;
+    return `<div class="panel m ${picked === i.id ? 'pick' : ''}" data-id="${i.id}"><div class="row between"><span class="chip">${k}</span>${tab === 'alle' ? `<span class="faint" style="font-size:12px">${ST[i.status]}</span>` : ''}</div>
+      <h3>${esc(i.t)}</h3>${i.progress && i.status !== 'fertig' ? `<div class="mono" style="font-size:13px">Stand: ${esc(i.progress)}</div>` : ''}${i.note ? `<p class="mute" style="font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere">${esc(i.note)}</p>` : ''}
+      ${i.status === 'fertig' ? `<div class="row between"><div class="stars" role="group" aria-label="Bewertung">${[1, 2, 3, 4, 5].map(n => `<button type="button" class="${n <= (i.rating || 0) ? 'on' : ''}" data-star="${n}" aria-label="${n} von 5 Sternen" aria-pressed="${n === i.rating}">★</button>`).join('')}</div>${i.done ? `<span class="faint" style="font-size:12px">fertig ${fmtDate(i.done)}</span>` : ''}</div>` : ''}
+      <div class="row foot" style="gap:6px">${i.status === 'offen' ? '<button type="button" class="sm primary" data-to="laeuft">▶ Anfangen</button>' : ''}${i.status !== 'fertig' ? '<button type="button" class="sm" data-to="fertig">✓ Fertig</button>' : '<button type="button" class="sm" data-to="offen">Nochmal</button>'}<span class="grow"></span><button type="button" class="ghost sm" data-ed aria-label="Bearbeiten">✎</button></div></div>`; }).join('')
+    : `<div class="empty" style="grid-column:1/-1">${!D.items.length ? 'Noch nichts auf der Liste. Trag oben den ersten Titel ein.' : q || kind ? 'Kein Treffer.' : 'Hier ist gerade nichts.'}</div>`;
+}
+function move(i, to) { i.status = to; i.done = to === 'fertig' ? today() : ''; if (to === 'offen') i.progress = ''; save(); render(); toast(`„${i.t}“ ist jetzt unter „${ST[to]}“`); }
+$('#f').onsubmit = e => { e.preventDefault(); const f = e.target, t = f.t.value.trim(); if (!t) return;
+  if (D.items.some(i => i.t.toLowerCase() === t.toLowerCase() && i.kind === f.kind.value)) return toast('Steht schon auf der Liste');
+  D.items.push({ id: uid(), t, kind: f.kind.value, status: f.status.value, rating: 0, progress: '', note: '', added: new Date().toISOString(), done: f.status.value === 'fertig' ? today() : '' }); tab = f.status.value; f.t.value = ''; f.t.focus(); save(); render(); };
+$('#q').oninput = e => { q = e.target.value; render(); };
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; picked = null; return render(); }
+  const k = e.target.closest('[data-kind]'); if (k) { kind = kind === k.dataset.kind ? '' : k.dataset.kind; return render(); }
+  const card = e.target.closest('[data-id]'); if (!card) return; const i = D.items.find(x => x.id === card.dataset.id); if (!i) return;
+  const st = e.target.closest('[data-star]'); if (st) { i.rating = i.rating === +st.dataset.star ? 0 : +st.dataset.star; save(); return render(); }
+  const to = e.target.closest('[data-to]'); if (to) return move(i, to.dataset.to);
+  if (!e.target.closest('[data-ed]')) return;
+  const v = await WB.editForm('Eintrag bearbeiten', [{ k: 't', l: 'Titel', v: i.t, req: true }, { k: 'kind', l: 'Art', type: 'select', v: i.kind, opts: Object.entries(KIND) }, { k: 'status', l: 'Stand', type: 'select', v: i.status, opts: Object.entries(ST) },
+    { k: 'progress', l: 'Wie weit? (z. B. Staffel 2, Folge 4 oder Seite 120)', v: i.progress || '' }, { k: 'note', l: 'Notiz', type: 'textarea', v: i.note || '' }], { danger: 'Löschen' });
+  if (!v) return;
+  if (v === 'delete') { D.items = D.items.filter(x => x !== i); toast(`„${i.t}“ gelöscht`); }
+  else if (v.t) { const was = i.status; Object.assign(i, v); if (i.status !== was) i.done = i.status === 'fertig' ? today() : ''; }
+  save(); render();
+});
+$('#pick').onclick = () => { const l = D.items.filter(i => i.status === 'offen' && (!kind || i.kind === kind));
+  if (!l.length) return toast(kind ? `Unter „Geplant“ steht nichts vom Typ ${KIND[kind]}` : 'Unter „Geplant“ steht noch nichts');
+  const rest = l.length > 1 ? l.filter(i => i.id !== picked) : l, x = rest[Math.floor(Math.random() * rest.length)];
+  picked = x.id; tab = 'offen'; q = ''; $('#q').value = ''; render(); $(`[data-id="${x.id}"]`).scrollIntoView({ block: 'center' }); toast(`Vorschlag: ${x.t}`); };
+(async () => { D = Object.assign(D, await Store.get('merkliste', D)); render(); })();
+</script>
+</body></html>

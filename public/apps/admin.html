@@ -67,7 +67,7 @@ let me, U = [], appIds = [], edit = null, lf = '', req2fa = false;
 function sync2fa(u) { const f = $('#f'), forced = !!(u?.owner || f.admin.checked); f.require2fa.disabled = forced; f.require2fa.checked = forced || req2fa; $('#tfaHint').textContent = forced ? '(Admins immer)' : ''; }
 $('#f').addEventListener('change', e => { const t = e.target; if (t.name === 'require2fa') req2fa = t.checked; if (t.name === 'admin') sync2fa(edit);
   if (t.id === 'allBox') boxes().filter(i => !i.disabled).forEach(i => i.checked = t.checked); syncAll(); });
-const PRE = { alltag: ['finanzen','abos','kueche','gewohnheiten','countdown','notizen','fokus'], lernen: ['lernen','erklaert','tippen','notizen','fokus'], chat: ['messenger'] };
+const PRE = { alltag: ['finanzen','abos','kueche','gewohnheiten','countdown','notizen','fokus','kalender','merkliste','ablage'], lernen: ['lernen','erklaert','tippen','notizen','fokus','arbeitszeit','devtools'], chat: ['messenger'] };
 const appName = id => (APPS.find(a => a.id === id) || { t: id }).t;
 async function load() { const r = await api('/api/admin/users'); U = r.users; appIds = r.apps; render(); }
 function render() {
